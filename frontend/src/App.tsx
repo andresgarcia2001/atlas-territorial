@@ -14,7 +14,7 @@ const YEAR = 2022;
 const DEFAULT_TERRITORY_LEVEL: TerritoryLevelId = "province";
 
 const FALLBACK_TERRITORY_LEVELS: TerritoryLevel[] = [
-  { id: "province", label: "Provincias", territory_count: 0 },
+  { id: "province", label: "Provincias", territory_count: 1 },
   { id: "municipality", label: "Municipios", territory_count: 0 },
   { id: "census_radius", label: "Radios censales", territory_count: 0 },
 ];
@@ -64,6 +64,13 @@ function getInitialLayerSettings(loadedIndicators: string[], territoryLevel: Ter
   };
 }
 
+function getDefaultIndicator(loadedIndicators: string[]) {
+  const loadedGroups = getAvailableIndicatorGroups(loadedIndicators);
+  const firstIndicator = loadedGroups[0]?.indicators[0];
+
+  return loadedIndicators.includes(DEFAULT_INDICATOR) ? DEFAULT_INDICATOR : firstIndicator?.id ?? DEFAULT_INDICATOR;
+}
+
 function getInitialTerritoryLevel(levels: TerritoryLevel[]) {
   const defaultLevel = levels.find(
     (level) => level.id === DEFAULT_TERRITORY_LEVEL && level.territory_count > 0,
@@ -85,8 +92,17 @@ function getTerritorySelectionLabel(territoryIds: string[], territoryOptions: Te
   return `${territoryIds.length} territorios`;
 }
 
+async function fetchTerritoryLevelsOrFallback() {
+  try {
+    const loadedLevels = await fetchTerritoryLevels();
+    return loadedLevels.length > 0 ? loadedLevels : FALLBACK_TERRITORY_LEVELS;
+  } catch {
+    return FALLBACK_TERRITORY_LEVELS;
+  }
+}
+
 export function App() {
-  const [indicators, setIndicators] = useState<string[]>([]);
+  const [indicatorsByLevel, setIndicatorsByLevel] = useState<Partial<Record<TerritoryLevelId, string[]>>>({});
   const [territoryLevels, setTerritoryLevels] = useState<TerritoryLevel[]>(FALLBACK_TERRITORY_LEVELS);
   const [territoryOptionsByLevel, setTerritoryOptionsByLevel] = useState<
     Partial<Record<TerritoryLevelId, TerritoryOption[]>>
@@ -96,13 +112,16 @@ export function App() {
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
+  const indicators = indicatorsByLevel[draftLayer.territoryLevel] ?? [];
+  const appliedIndicators = indicatorsByLevel[appliedLayer.territoryLevel] ?? indicators;
   const availableIndicatorGroups = useMemo(() => getAvailableIndicatorGroups(indicators), [indicators]);
+  const appliedIndicatorGroups = useMemo(() => getAvailableIndicatorGroups(appliedIndicators), [appliedIndicators]);
   const selectedDraftIndicator =
     getIndicatorOption(draftLayer.indicator, availableIndicatorGroups) ??
     availableIndicatorGroups[0]?.indicators[0] ??
     ({ id: draftLayer.indicator, label: draftLayer.indicator } satisfies IndicatorOption);
   const selectedAppliedIndicator =
-    getIndicatorOption(appliedLayer.indicator, availableIndicatorGroups) ??
+    getIndicatorOption(appliedLayer.indicator, appliedIndicatorGroups) ??
     ({ id: appliedLayer.indicator, label: appliedLayer.indicator } satisfies IndicatorOption);
   const selectedDraftLevel =
     territoryLevels.find((level) => level.id === draftLayer.territoryLevel) ?? FALLBACK_TERRITORY_LEVELS[0];
@@ -115,17 +134,16 @@ export function App() {
   useEffect(() => {
     async function loadInitialMetadata() {
       try {
-        const loadedLevels = await fetchTerritoryLevels();
-        const levels = loadedLevels.length > 0 ? loadedLevels : FALLBACK_TERRITORY_LEVELS;
+        const levels = await fetchTerritoryLevelsOrFallback();
         const initialTerritoryLevel = getInitialTerritoryLevel(levels);
         const [loadedIndicators, loadedTerritories] = await Promise.all([
-          fetchIndicators(),
+          fetchIndicators(initialTerritoryLevel),
           fetchTerritoryOptions(initialTerritoryLevel),
         ]);
         const initialLayer = getInitialLayerSettings(loadedIndicators, initialTerritoryLevel);
 
         setTerritoryLevels(levels);
-        setIndicators(loadedIndicators);
+        setIndicatorsByLevel({ [initialTerritoryLevel]: loadedIndicators });
         setTerritoryOptionsByLevel({ [initialTerritoryLevel]: loadedTerritories });
         setDraftLayer(initialLayer);
         setAppliedLayer(initialLayer);
@@ -141,13 +159,31 @@ export function App() {
   useEffect(() => {
     let isCancelled = false;
 
-    fetchTerritoryOptions(draftLayer.territoryLevel)
-      .then((loadedTerritories) => {
+    Promise.all([fetchIndicators(draftLayer.territoryLevel), fetchTerritoryOptions(draftLayer.territoryLevel)])
+      .then(([loadedIndicators, loadedTerritories]) => {
         if (!isCancelled) {
+          setIndicatorsByLevel((currentIndicators) => ({
+            ...currentIndicators,
+            [draftLayer.territoryLevel]: loadedIndicators,
+          }));
           setTerritoryOptionsByLevel((currentOptions) => ({
             ...currentOptions,
             [draftLayer.territoryLevel]: loadedTerritories,
           }));
+          setDraftLayer((currentLayer) => {
+            if (currentLayer.territoryLevel !== draftLayer.territoryLevel) {
+              return currentLayer;
+            }
+
+            if (loadedIndicators.includes(currentLayer.indicator)) {
+              return currentLayer;
+            }
+
+            return {
+              ...currentLayer,
+              indicator: getDefaultIndicator(loadedIndicators),
+            };
+          });
           setMetadataError(null);
         }
       })
