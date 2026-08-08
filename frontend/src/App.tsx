@@ -1,6 +1,6 @@
-﻿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import { fetchIndicators, fetchTerritoryOptions } from "./api";
+import { fetchIndicators, fetchTerritoryLevels, fetchTerritoryOptions } from "./api";
 import { MapView } from "./components/MapView";
 import {
   DEFAULT_INDICATOR,
@@ -8,20 +8,28 @@ import {
   getIndicatorOption,
   type IndicatorOption,
 } from "./indicatorCatalog";
-import type { ColorMode, LayerSettings, TerritoryOption, ViewMode } from "./types";
+import type { ColorMode, LayerSettings, TerritoryLevel, TerritoryLevelId, TerritoryOption, ViewMode } from "./types";
 
 const YEAR = 2022;
+const DEFAULT_TERRITORY_LEVEL: TerritoryLevelId = "province";
+
+const FALLBACK_TERRITORY_LEVELS: TerritoryLevel[] = [
+  { id: "province", label: "Provincias", territory_count: 0 },
+  { id: "municipality", label: "Municipios", territory_count: 0 },
+  { id: "census_radius", label: "Radios censales", territory_count: 0 },
+];
 
 const DEFAULT_LAYER_SETTINGS: LayerSettings = {
   indicator: DEFAULT_INDICATOR,
   colorMode: "indicator",
   viewMode: "flat",
-  provinceIds: [],
+  territoryLevel: DEFAULT_TERRITORY_LEVEL,
+  territoryIds: [],
 };
 
 const COLOR_MODE_LABELS: Record<ColorMode, string> = {
   indicator: "Valor",
-  province: "Provincia",
+  territory: "Territorio",
 };
 
 const VIEW_MODE_LABELS: Record<ViewMode, string> = {
@@ -38,40 +46,54 @@ function areLayerSettingsEqual(first: LayerSettings, second: LayerSettings) {
     first.indicator === second.indicator &&
     first.colorMode === second.colorMode &&
     first.viewMode === second.viewMode &&
-    areArraysEqual(first.provinceIds, second.provinceIds)
+    first.territoryLevel === second.territoryLevel &&
+    areArraysEqual(first.territoryIds, second.territoryIds)
   );
 }
 
-function getInitialLayerSettings(loadedIndicators: string[]): LayerSettings {
+function getInitialLayerSettings(loadedIndicators: string[], territoryLevel: TerritoryLevelId): LayerSettings {
   const loadedGroups = getAvailableIndicatorGroups(loadedIndicators);
   const firstIndicator = loadedGroups[0]?.indicators[0];
 
   return {
     ...DEFAULT_LAYER_SETTINGS,
+    territoryLevel,
     indicator: loadedIndicators.includes(DEFAULT_INDICATOR)
       ? DEFAULT_INDICATOR
       : firstIndicator?.id ?? DEFAULT_INDICATOR,
   };
 }
 
-function getProvinceLabel(provinceIds: string[], territoryOptions: TerritoryOption[]) {
-  if (provinceIds.length === 0) {
-    return "Todas";
+function getInitialTerritoryLevel(levels: TerritoryLevel[]) {
+  const defaultLevel = levels.find(
+    (level) => level.id === DEFAULT_TERRITORY_LEVEL && level.territory_count > 0,
+  );
+  const firstLoadedLevel = levels.find((level) => level.territory_count > 0);
+
+  return defaultLevel?.id ?? firstLoadedLevel?.id ?? DEFAULT_TERRITORY_LEVEL;
+}
+
+function getTerritorySelectionLabel(territoryIds: string[], territoryOptions: TerritoryOption[]) {
+  if (territoryIds.length === 0) {
+    return "Todos";
   }
 
-  if (provinceIds.length === 1) {
-    return territoryOptions.find((territory) => territory.id === provinceIds[0])?.name ?? "1 provincia";
+  if (territoryIds.length === 1) {
+    return territoryOptions.find((territory) => territory.id === territoryIds[0])?.name ?? "1 territorio";
   }
 
-  return `${provinceIds.length} provincias`;
+  return `${territoryIds.length} territorios`;
 }
 
 export function App() {
   const [indicators, setIndicators] = useState<string[]>([]);
-  const [territoryOptions, setTerritoryOptions] = useState<TerritoryOption[]>([]);
+  const [territoryLevels, setTerritoryLevels] = useState<TerritoryLevel[]>(FALLBACK_TERRITORY_LEVELS);
+  const [territoryOptionsByLevel, setTerritoryOptionsByLevel] = useState<
+    Partial<Record<TerritoryLevelId, TerritoryOption[]>>
+  >({});
   const [draftLayer, setDraftLayer] = useState<LayerSettings>(DEFAULT_LAYER_SETTINGS);
   const [appliedLayer, setAppliedLayer] = useState<LayerSettings>(DEFAULT_LAYER_SETTINGS);
-  const [indicatorError, setIndicatorError] = useState<string | null>(null);
+  const [metadataError, setMetadataError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
   const availableIndicatorGroups = useMemo(() => getAvailableIndicatorGroups(indicators), [indicators]);
@@ -82,23 +104,63 @@ export function App() {
   const selectedAppliedIndicator =
     getIndicatorOption(appliedLayer.indicator, availableIndicatorGroups) ??
     ({ id: appliedLayer.indicator, label: appliedLayer.indicator } satisfies IndicatorOption);
+  const selectedDraftLevel =
+    territoryLevels.find((level) => level.id === draftLayer.territoryLevel) ?? FALLBACK_TERRITORY_LEVELS[0];
+  const selectedAppliedLevel =
+    territoryLevels.find((level) => level.id === appliedLayer.territoryLevel) ?? FALLBACK_TERRITORY_LEVELS[0];
+  const territoryOptions = territoryOptionsByLevel[draftLayer.territoryLevel] ?? [];
+  const appliedTerritoryOptions = territoryOptionsByLevel[appliedLayer.territoryLevel] ?? [];
   const hasPendingChanges = !areLayerSettingsEqual(draftLayer, appliedLayer);
 
   useEffect(() => {
-    Promise.all([fetchIndicators(), fetchTerritoryOptions()])
-      .then(([loadedIndicators, loadedTerritories]) => {
-        const initialLayer = getInitialLayerSettings(loadedIndicators);
+    async function loadInitialMetadata() {
+      try {
+        const loadedLevels = await fetchTerritoryLevels();
+        const levels = loadedLevels.length > 0 ? loadedLevels : FALLBACK_TERRITORY_LEVELS;
+        const initialTerritoryLevel = getInitialTerritoryLevel(levels);
+        const [loadedIndicators, loadedTerritories] = await Promise.all([
+          fetchIndicators(),
+          fetchTerritoryOptions(initialTerritoryLevel),
+        ]);
+        const initialLayer = getInitialLayerSettings(loadedIndicators, initialTerritoryLevel);
 
+        setTerritoryLevels(levels);
         setIndicators(loadedIndicators);
-        setTerritoryOptions(loadedTerritories);
+        setTerritoryOptionsByLevel({ [initialTerritoryLevel]: loadedTerritories });
         setDraftLayer(initialLayer);
         setAppliedLayer(initialLayer);
-        setIndicatorError(null);
+        setMetadataError(null);
+      } catch (caughtError) {
+        setMetadataError(caughtError instanceof Error ? caughtError.message : "No se pudieron cargar los metadatos.");
+      }
+    }
+
+    loadInitialMetadata();
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    fetchTerritoryOptions(draftLayer.territoryLevel)
+      .then((loadedTerritories) => {
+        if (!isCancelled) {
+          setTerritoryOptionsByLevel((currentOptions) => ({
+            ...currentOptions,
+            [draftLayer.territoryLevel]: loadedTerritories,
+          }));
+          setMetadataError(null);
+        }
       })
       .catch((caughtError: Error) => {
-        setIndicatorError(caughtError.message);
+        if (!isCancelled) {
+          setMetadataError(caughtError.message);
+        }
       });
-  }, []);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [draftLayer.territoryLevel]);
 
   function updateDraftLayer(nextLayer: Partial<LayerSettings>) {
     setDraftLayer((currentLayer) => ({
@@ -107,14 +169,21 @@ export function App() {
     }));
   }
 
-  function toggleProvince(provinceId: string) {
+  function updateTerritoryLevel(territoryLevel: TerritoryLevelId) {
+    updateDraftLayer({
+      territoryLevel,
+      territoryIds: [],
+    });
+  }
+
+  function toggleTerritory(territoryId: string) {
     setDraftLayer((currentLayer) => {
-      const isSelected = currentLayer.provinceIds.includes(provinceId);
-      const provinceIds = isSelected
-        ? currentLayer.provinceIds.filter((currentProvinceId) => currentProvinceId !== provinceId)
+      const isSelected = currentLayer.territoryIds.includes(territoryId);
+      const territoryIds = isSelected
+        ? currentLayer.territoryIds.filter((currentTerritoryId) => currentTerritoryId !== territoryId)
         : [
-            ...currentLayer.provinceIds,
-            provinceId,
+            ...currentLayer.territoryIds,
+            territoryId,
           ].sort((first, second) => {
             const firstIndex = territoryOptions.findIndex((territory) => territory.id === first);
             const secondIndex = territoryOptions.findIndex((territory) => territory.id === second);
@@ -123,7 +192,7 @@ export function App() {
 
       return {
         ...currentLayer,
-        provinceIds,
+        territoryIds,
       };
     });
   }
@@ -140,10 +209,32 @@ export function App() {
     <>
       <aside className="panel" aria-label="Controles del atlas">
         <header className="panel-header">
-          <span className="eyebrow">Atlas provincial</span>
+          <span className="eyebrow">Atlas territorial</span>
           <h1>Territorio Argentino</h1>
-          <p>Indicadores provinciales - Ano {YEAR}</p>
+          <p>Indicadores territoriales - Ano {YEAR}</p>
         </header>
+
+        <section className="control-block" aria-labelledby="level-heading">
+          <div className="control-title">
+            <label id="level-heading">Nivel territorial</label>
+            <span>{selectedDraftLevel.label}</span>
+          </div>
+
+          <div className="segmented territory-level-list" role="group" aria-label="Nivel territorial">
+            {territoryLevels.map((level) => (
+              <button
+                aria-pressed={level.id === draftLayer.territoryLevel}
+                className={level.id === draftLayer.territoryLevel ? "segment is-active" : "segment"}
+                disabled={level.territory_count === 0}
+                key={level.id}
+                type="button"
+                onClick={() => updateTerritoryLevel(level.id)}
+              >
+                {level.label}
+              </button>
+            ))}
+          </div>
+        </section>
 
         <section className="control-block" aria-labelledby="indicator-heading">
           <div className="control-title">
@@ -175,32 +266,32 @@ export function App() {
           </div>
         </section>
 
-        <section className="control-block" aria-labelledby="province-heading">
+        <section className="control-block" aria-labelledby="territory-heading">
           <div className="control-title">
-            <label id="province-heading">Provincias</label>
-            <span>{getProvinceLabel(draftLayer.provinceIds, territoryOptions)}</span>
+            <label id="territory-heading">Territorios</label>
+            <span>{getTerritorySelectionLabel(draftLayer.territoryIds, territoryOptions)}</span>
           </div>
 
-          <div className="province-actions">
+          <div className="territory-actions">
             <button
-              className={draftLayer.provinceIds.length === 0 ? "province-action is-active" : "province-action"}
+              className={draftLayer.territoryIds.length === 0 ? "territory-action is-active" : "territory-action"}
               type="button"
-              onClick={() => updateDraftLayer({ provinceIds: [] })}
+              onClick={() => updateDraftLayer({ territoryIds: [] })}
             >
-              Todas
+              Todos
             </button>
           </div>
 
-          <div className="province-list">
+          <div className="territory-list">
             {territoryOptions.map((territory) => (
               <button
-                aria-pressed={draftLayer.provinceIds.includes(territory.id)}
+                aria-pressed={draftLayer.territoryIds.includes(territory.id)}
                 className={
-                  draftLayer.provinceIds.includes(territory.id) ? "province-button is-active" : "province-button"
+                  draftLayer.territoryIds.includes(territory.id) ? "territory-button is-active" : "territory-button"
                 }
                 key={territory.id}
                 type="button"
-                onClick={() => toggleProvince(territory.id)}
+                onClick={() => toggleTerritory(territory.id)}
               >
                 {territory.name}
               </button>
@@ -223,12 +314,12 @@ export function App() {
                 Valor
               </button>
               <button
-                aria-pressed={draftLayer.colorMode === "province"}
-                className={draftLayer.colorMode === "province" ? "segment is-active" : "segment"}
+                aria-pressed={draftLayer.colorMode === "territory"}
+                className={draftLayer.colorMode === "territory" ? "segment is-active" : "segment"}
                 type="button"
-                onClick={() => updateDraftLayer({ colorMode: "province" })}
+                onClick={() => updateDraftLayer({ colorMode: "territory" })}
               >
-                Provincia
+                Territorio
               </button>
             </div>
           </div>
@@ -266,12 +357,13 @@ export function App() {
           <span>Capa aplicada</span>
           <strong>{selectedAppliedIndicator.label}</strong>
           <p>
-            Color: {COLOR_MODE_LABELS[appliedLayer.colorMode]} - Vista: {VIEW_MODE_LABELS[appliedLayer.viewMode]}
+            Nivel: {selectedAppliedLevel.label} - Color: {COLOR_MODE_LABELS[appliedLayer.colorMode]} - Vista:{" "}
+            {VIEW_MODE_LABELS[appliedLayer.viewMode]}
           </p>
-          <p>Provincias: {getProvinceLabel(appliedLayer.provinceIds, territoryOptions)}</p>
+          <p>Territorios: {getTerritorySelectionLabel(appliedLayer.territoryIds, appliedTerritoryOptions)}</p>
         </section>
 
-        {indicatorError && <p className="error">{indicatorError}</p>}
+        {metadataError && <p className="error">{metadataError}</p>}
         {mapError && <p className="error">{mapError}</p>}
       </aside>
 
@@ -279,7 +371,8 @@ export function App() {
         colorMode={appliedLayer.colorMode}
         indicator={appliedLayer.indicator}
         onDataError={setMapError}
-        provinceIds={appliedLayer.provinceIds}
+        territoryIds={appliedLayer.territoryIds}
+        territoryLevel={appliedLayer.territoryLevel}
         viewMode={appliedLayer.viewMode}
         year={YEAR}
       />

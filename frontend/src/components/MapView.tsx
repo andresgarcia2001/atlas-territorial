@@ -16,14 +16,15 @@ type StyleExpression = unknown[];
 type LoadedMapData = {
   data: MapData;
   indicator: string;
-  provinceKey: string;
+  territoryKey: string;
+  territoryLevel: string;
   year: number;
 };
 
 const MIN_LATITUDE = -90;
 const MAX_LATITUDE = 90;
 
-const PROVINCE_COLORS = [
+const TERRITORY_COLORS = [
   "#22c55e",
   "#f97316",
   "#3b82f6",
@@ -50,8 +51,8 @@ const PROVINCE_COLORS = [
   "#fb923c",
 ];
 
-function getProvinceFilterKey(provinceIds: string[]) {
-  return provinceIds.length === 0 ? "all" : provinceIds.join("|");
+function getTerritoryFilterKey(territoryIds: string[]) {
+  return territoryIds.length === 0 ? "all" : territoryIds.join("|");
 }
 
 function formatIndicatorName(indicator: string) {
@@ -100,11 +101,11 @@ function getValueRange(data: MapData) {
   };
 }
 
-function getProvinceColorExpression(data: MapData): StyleExpression {
+function getTerritoryColorExpression(data: MapData): StyleExpression {
   const expression: StyleExpression = ["match", ["get", "id"]];
 
   data.features.forEach((feature, index) => {
-    expression.push(feature.properties.id, PROVINCE_COLORS[index % PROVINCE_COLORS.length]);
+    expression.push(feature.properties.id, TERRITORY_COLORS[index % TERRITORY_COLORS.length]);
   });
 
   expression.push("#94a3b8");
@@ -118,8 +119,8 @@ function getColorExpression(
   min: number,
   max: number,
 ): StyleExpression {
-  if (colorMode === "province") {
-    return getProvinceColorExpression(data);
+  if (colorMode === "territory") {
+    return getTerritoryColorExpression(data);
   }
 
   if (indicator === "porcentaje_mujeres" || indicator === "porcentaje_varones") {
@@ -174,7 +175,7 @@ function getHeightExpression(indicator: string, min: number, max: number): Style
 }
 
 function getFillOpacity(colorMode: ColorMode) {
-  return colorMode === "province" ? 0.58 : 0.5;
+  return colorMode === "territory" ? 0.58 : 0.5;
 }
 
 function clampLatitude(latitude: number) {
@@ -335,15 +336,15 @@ function renderTerritoryData(
   applyViewMode(map, layerSettings.viewMode);
 }
 
-export function MapView({ colorMode, indicator, onDataError, provinceIds, viewMode, year }: MapViewProps) {
+export function MapView({ colorMode, indicator, onDataError, territoryIds, territoryLevel, viewMode, year }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const loadedDataRef = useRef<LoadedMapData | null>(null);
-  const latestLayerSettingsRef = useRef<LayerSettings>({ colorMode, indicator, provinceIds, viewMode });
+  const latestLayerSettingsRef = useRef<LayerSettings>({ colorMode, indicator, territoryIds, territoryLevel, viewMode });
   const lastFitKeyRef = useRef<string | null>(null);
-  const provinceKey = useMemo(() => getProvinceFilterKey(provinceIds), [provinceIds]);
+  const territoryKey = useMemo(() => getTerritoryFilterKey(territoryIds), [territoryIds]);
 
-  latestLayerSettingsRef.current = { colorMode, indicator, provinceIds, viewMode };
+  latestLayerSettingsRef.current = { colorMode, indicator, territoryIds, territoryLevel, viewMode };
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -397,18 +398,19 @@ export function MapView({ colorMode, indicator, onDataError, provinceIds, viewMo
 
     async function loadData() {
       try {
-        const data = await fetchMapData(indicator, year, provinceIds);
+        const data = await fetchMapData(indicator, year, territoryLevel, territoryIds);
 
         if (isCancelled) {
           return;
         }
 
         const applyData = () => {
-          const shouldFitMap = lastFitKeyRef.current !== provinceKey;
+          const fitKey = `${territoryLevel}:${territoryKey}`;
+          const shouldFitMap = lastFitKeyRef.current !== fitKey;
 
-          loadedDataRef.current = { data, indicator, provinceKey, year };
+          loadedDataRef.current = { data, indicator, territoryKey, territoryLevel, year };
           renderTerritoryData(mapInstance, data, latestLayerSettingsRef.current, shouldFitMap);
-          lastFitKeyRef.current = provinceKey;
+          lastFitKeyRef.current = fitKey;
           onDataError?.(null);
         };
 
@@ -435,7 +437,7 @@ export function MapView({ colorMode, indicator, onDataError, provinceIds, viewMo
     return () => {
       isCancelled = true;
     };
-  }, [indicator, onDataError, provinceIds, provinceKey, year]);
+  }, [indicator, onDataError, territoryIds, territoryKey, territoryLevel, year]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -445,14 +447,15 @@ export function MapView({ colorMode, indicator, onDataError, provinceIds, viewMo
       !map ||
       !loadedData ||
       loadedData.indicator !== indicator ||
-      loadedData.provinceKey !== provinceKey ||
+      loadedData.territoryKey !== territoryKey ||
+      loadedData.territoryLevel !== territoryLevel ||
       loadedData.year !== year
     ) {
       return;
     }
 
-    renderTerritoryData(map, loadedData.data, { colorMode, indicator, provinceIds, viewMode }, false);
-  }, [colorMode, indicator, provinceIds, provinceKey, viewMode, year]);
+    renderTerritoryData(map, loadedData.data, { colorMode, indicator, territoryIds, territoryLevel, viewMode }, false);
+  }, [colorMode, indicator, territoryIds, territoryKey, territoryLevel, viewMode, year]);
 
-  return <main id="map" ref={containerRef} aria-label="Mapa de indicadores provinciales" />;
+  return <main id="map" ref={containerRef} aria-label="Mapa de indicadores territoriales" />;
 }

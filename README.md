@@ -1,17 +1,20 @@
 # Territorio Argentino
 
+MVP local, no productivo, para explorar indicadores territoriales de Argentina sobre
+geometrias PostGIS. El objetivo actual es validar la arquitectura para provincias,
+municipios y radios censales antes de crecer en datos y funcionalidades.
+
 Visor territorial local con PostgreSQL/PostGIS, FastAPI, React y MapLibre.
 
 <img width="1621" height="1020" alt="imagen" src="https://github.com/user-attachments/assets/2a381131-4f20-4508-a8aa-85673ae5d6a6" />
 
-
 ## Servicios
 
 - `db`: PostgreSQL con PostGIS.
-- `backend`: API FastAPI que aplica migraciones Alembic y publica territorios,
-  indicadores y GeoJSON para el mapa.
+- `backend`: API FastAPI que aplica migraciones Alembic y publica niveles
+  territoriales, territorios, indicadores y GeoJSON para el mapa.
 - `frontend`: visor React + MapLibre con modos 2D y 3D.
-- `loader`: tarea manual para cargar el GeoJSON real en PostGIS.
+- `loader`: tarea manual para cargar GeoJSON territoriales en PostGIS.
 
 ## Arquitectura
 
@@ -19,9 +22,19 @@ Visor territorial local con PostgreSQL/PostGIS, FastAPI, React y MapLibre.
 flowchart LR
   frontend[frontend<br/>React + MapLibre] --> backend[backend<br/>FastAPI]
   backend -->|API + Alembic| db[(db<br/>PostgreSQL + PostGIS)]
-  loader[loader<br/>load_provinces.py] --> db
-  data[(data<br/>GeoJSON provincias)] -.-> loader
+  loader[loader<br/>load_territories.py] --> db
+  data[(data<br/>GeoJSON territoriales)] -.-> loader
 ```
+
+El modelo central es `territories`: una unidad territorial puede ser una provincia,
+un municipio o un radio censal. Cada territorio guarda:
+
+- `level_id`: `province`, `municipality` o `census_radius`.
+- `source`: fuente de la geometria, por ejemplo `IGN`.
+- `external_id`: codigo original del dataset fuente.
+- `parent_id`: relacion jerarquica opcional con otro territorio.
+- `metadata`: propiedades originales del GeoJSON.
+- `geom`: geometria PostGIS.
 
 ## Configuracion local
 
@@ -43,6 +56,9 @@ docker compose up -d --build
 ```
 
 Al arrancar, el backend ejecuta las migraciones Alembic antes de iniciar la API.
+Ese flujo es comodo para desarrollo local con una sola instancia. En un entorno con
+mas de una replica del backend, conviene separar migraciones y arranque en un job o
+step unico previo.
 
 Abrir:
 
@@ -66,12 +82,12 @@ Aplicar migraciones manualmente:
 docker compose exec backend alembic -c alembic.ini upgrade head
 ```
 
-## Cargar provincias reales
+## Cargar territorios
 
-El archivo esperado es:
+El loader principal es:
 
 ```text
-data/poblacion_provincias_indec_2022.geojson
+scripts/load_territories.py
 ```
 
 Ejecutar:
@@ -80,29 +96,72 @@ Ejecutar:
 docker compose --profile tools run --rm loader
 ```
 
-Si se reemplaza el archivo por otro dataset, conservar esa ruta o ajustar `PROVINCES_GEOJSON`
-en `.env`.
+Dataset incluido por defecto:
 
-Fuente declarada por el loader: `INDEC CNPHyV 2022 provisorio / IGN`.
+```text
+data/poblacion_provincias_indec_2022.geojson
+```
+
+Variables principales:
+
+- `PROVINCES_GEOJSON`: GeoJSON de provincias con indicadores censales.
+- `IGN_MUNICIPALITIES_GEOJSON`: GeoJSON de municipios/localidades censales IGN.
+- `CENSUS_RADII_GEOJSON`: GeoJSON de radios censales.
+- `CENSUS_RADII_SOURCE`: etiqueta de fuente para radios censales.
+
+Si un dataset opcional no esta configurado o no existe, el loader lo omite. Si se
+configura explicitamente una ruta y el archivo no existe, el loader falla.
+
+Cuando un GeoJSON use nombres de columnas distintos, configurar:
+
+- `PROVINCE_ID_PROPERTY`, `PROVINCE_NAME_PROPERTY`
+- `IGN_MUNICIPALITY_ID_PROPERTY`, `IGN_MUNICIPALITY_NAME_PROPERTY`,
+  `IGN_MUNICIPALITY_PARENT_PROPERTY`
+- `CENSUS_RADIUS_ID_PROPERTY`, `CENSUS_RADIUS_NAME_PROPERTY`,
+  `CENSUS_RADIUS_PARENT_PROPERTY`
+
+Las propiedades pueden ser simples, como `nombre`, o anidadas, como `provincia.id`.
+
+El loader solo guarda `parent_id` si el territorio padre ya existe. Si el codigo de
+provincia/municipio del dataset fuente no coincide con los IDs cargados, carga la
+geometria y deja esa relacion pendiente.
+
+## API territorial
+
+Endpoints principales:
+
+- `GET /territory-levels`
+- `GET /territory-options?level=province`
+- `GET /territories?level=municipality`
+- `GET /indicators`
+- `GET /map-data?level=census_radius&indicator=poblacion_total&year=2022`
+- `GET /indicator-values?level=census_radius&indicator=poblacion_total&year=2022`
+
+`/map-data` acepta `territory_ids` para filtrar territorios. `province_ids` queda
+soportado como alias temporal de compatibilidad.
+
+Para escalar a radios censales, la direccion recomendada es cachear geometria desde
+`/territories` y refrescar valores desde `/indicator-values`. `/map-data` queda como
+endpoint de conveniencia para el estado actual del frontend.
 
 ## Indicadores
 
-El script carga indicadores crudos:
+El dataset provincial incluido carga indicadores crudos:
 
 - `poblacion_total` desde `tpvpsc`
 - `mujeres` desde `mftvp`
 - `varones` desde `vmtvp`
 - `otro_x` desde `oxtvp`
 
-Y calcula indicadores derivados:
+Y calcula indicadores derivados por nivel territorial:
 
 - `porcentaje_mujeres`
 - `porcentaje_varones`
 - `porcentaje_otro_x`
 - `densidad_poblacional`
 
-El modo 3D no usa elevacion real del terreno: la altura representa el valor del indicador
-seleccionado.
+El modo 3D no usa elevacion real del terreno: la altura representa el valor del
+indicador seleccionado.
 
 ## Pasos rapidos para levantarlo
 
@@ -119,6 +178,12 @@ docker compose up -d --build
 
 ```text
 http://localhost:5173
+```
+
+6. Cargar datos:
+
+```powershell
+docker compose --profile tools run --rm loader
 ```
 
 Para apagarlo:

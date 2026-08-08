@@ -1,8 +1,19 @@
-INSERT INTO territories (id, name, geom)
+INSERT INTO territory_levels (id, label, display_order)
+VALUES
+  ('province', 'Provincias', 10),
+  ('municipality', 'Municipios', 20),
+  ('census_radius', 'Radios censales', 30)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO territories (id, name, level_id, source, external_id, metadata, geom)
 VALUES
   (
     'zona_norte',
     'Zona Norte',
+    'province',
+    'demo',
+    'zona_norte',
+    '{}'::jsonb,
     ST_GeomFromText(
       'MULTIPOLYGON(((-58.50 -34.50, -58.42 -34.50, -58.42 -34.58, -58.50 -34.58, -58.50 -34.50)))',
       4326
@@ -11,6 +22,10 @@ VALUES
   (
     'zona_centro',
     'Zona Centro',
+    'province',
+    'demo',
+    'zona_centro',
+    '{}'::jsonb,
     ST_GeomFromText(
       'MULTIPOLYGON(((-58.42 -34.50, -58.34 -34.50, -58.34 -34.58, -58.42 -34.58, -58.42 -34.50)))',
       4326
@@ -19,6 +34,10 @@ VALUES
   (
     'zona_sur',
     'Zona Sur',
+    'province',
+    'demo',
+    'zona_sur',
+    '{}'::jsonb,
     ST_GeomFromText(
       'MULTIPOLYGON(((-58.50 -34.58, -58.34 -34.58, -58.34 -34.66, -58.50 -34.66, -58.50 -34.58)))',
       4326
