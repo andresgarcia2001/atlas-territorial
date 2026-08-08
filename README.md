@@ -2,6 +2,9 @@
 
 Visor territorial local con PostgreSQL/PostGIS, FastAPI, React y MapLibre.
 
+<img width="1621" height="1020" alt="imagen" src="https://github.com/user-attachments/assets/2a381131-4f20-4508-a8aa-85673ae5d6a6" />
+
+
 ## Servicios
 
 - `db`: PostgreSQL con PostGIS.
