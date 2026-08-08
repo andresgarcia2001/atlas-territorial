@@ -1,5 +1,6 @@
 import json
 import os
+from pathlib import Path
 
 import psycopg
 
@@ -7,6 +8,19 @@ import psycopg
 DATA_PATH = os.getenv("PROVINCES_GEOJSON", "/data/poblacion_provincias_indec_2022.geojson")
 SOURCE = "INDEC CNPHyV 2022 provisorio / IGN"
 YEAR = 2022
+
+
+def read_geojson(path):
+    geojson_path = Path(path)
+
+    if not geojson_path.is_file():
+        raise SystemExit(
+            f"No se encontro el GeoJSON de provincias en {geojson_path}. "
+            "Monte ./data en /data o configure PROVINCES_GEOJSON con una ruta valida."
+        )
+
+    with geojson_path.open(encoding="utf-8") as file:
+        return json.load(file)
 
 
 def get_connection():
@@ -143,8 +157,7 @@ def derive_indicators(cur):
 
 
 def main():
-    with open(DATA_PATH, encoding="utf-8") as file:
-        data = json.load(file)
+    data = read_geojson(DATA_PATH)
 
     with get_connection() as conn:
         with conn.cursor() as cur:
