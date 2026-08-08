@@ -2,30 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchIndicators, fetchTerritoryLevels, fetchTerritoryOptions } from "./api";
 import { MapView } from "./components/MapView";
+import { getAvailableIndicatorGroups, getIndicatorOption, type IndicatorOption } from "./indicatorCatalog";
 import {
-  DEFAULT_INDICATOR,
-  getAvailableIndicatorGroups,
-  getIndicatorOption,
-  type IndicatorOption,
-} from "./indicatorCatalog";
+  DEFAULT_LAYER_SETTINGS,
+  FALLBACK_TERRITORY_LEVELS,
+  areLayerSettingsEqual,
+  getDefaultIndicator,
+  getInitialLayerSettings,
+  getInitialTerritoryLevel,
+  getTerritoryLevelsOrFallback,
+  getTerritorySelectionLabel,
+} from "./territoryMetadata";
 import type { ColorMode, LayerSettings, TerritoryLevel, TerritoryLevelId, TerritoryOption, ViewMode } from "./types";
 
 const YEAR = 2022;
-const DEFAULT_TERRITORY_LEVEL: TerritoryLevelId = "province";
-
-const FALLBACK_TERRITORY_LEVELS: TerritoryLevel[] = [
-  { id: "province", label: "Provincias", territory_count: 1 },
-  { id: "municipality", label: "Municipios", territory_count: 0 },
-  { id: "census_radius", label: "Radios censales", territory_count: 0 },
-];
-
-const DEFAULT_LAYER_SETTINGS: LayerSettings = {
-  indicator: DEFAULT_INDICATOR,
-  colorMode: "indicator",
-  viewMode: "flat",
-  territoryLevel: DEFAULT_TERRITORY_LEVEL,
-  territoryIds: [],
-};
 
 const COLOR_MODE_LABELS: Record<ColorMode, string> = {
   indicator: "Valor",
@@ -36,70 +26,6 @@ const VIEW_MODE_LABELS: Record<ViewMode, string> = {
   flat: "2D",
   extruded: "3D",
 };
-
-function areArraysEqual(first: string[], second: string[]) {
-  return first.length === second.length && first.every((value, index) => value === second[index]);
-}
-
-function areLayerSettingsEqual(first: LayerSettings, second: LayerSettings) {
-  return (
-    first.indicator === second.indicator &&
-    first.colorMode === second.colorMode &&
-    first.viewMode === second.viewMode &&
-    first.territoryLevel === second.territoryLevel &&
-    areArraysEqual(first.territoryIds, second.territoryIds)
-  );
-}
-
-function getInitialLayerSettings(loadedIndicators: string[], territoryLevel: TerritoryLevelId): LayerSettings {
-  const loadedGroups = getAvailableIndicatorGroups(loadedIndicators);
-  const firstIndicator = loadedGroups[0]?.indicators[0];
-
-  return {
-    ...DEFAULT_LAYER_SETTINGS,
-    territoryLevel,
-    indicator: loadedIndicators.includes(DEFAULT_INDICATOR)
-      ? DEFAULT_INDICATOR
-      : firstIndicator?.id ?? DEFAULT_INDICATOR,
-  };
-}
-
-function getDefaultIndicator(loadedIndicators: string[]) {
-  const loadedGroups = getAvailableIndicatorGroups(loadedIndicators);
-  const firstIndicator = loadedGroups[0]?.indicators[0];
-
-  return loadedIndicators.includes(DEFAULT_INDICATOR) ? DEFAULT_INDICATOR : firstIndicator?.id ?? DEFAULT_INDICATOR;
-}
-
-function getInitialTerritoryLevel(levels: TerritoryLevel[]) {
-  const defaultLevel = levels.find(
-    (level) => level.id === DEFAULT_TERRITORY_LEVEL && level.territory_count > 0,
-  );
-  const firstLoadedLevel = levels.find((level) => level.territory_count > 0);
-
-  return defaultLevel?.id ?? firstLoadedLevel?.id ?? DEFAULT_TERRITORY_LEVEL;
-}
-
-function getTerritorySelectionLabel(territoryIds: string[], territoryOptions: TerritoryOption[]) {
-  if (territoryIds.length === 0) {
-    return "Todos";
-  }
-
-  if (territoryIds.length === 1) {
-    return territoryOptions.find((territory) => territory.id === territoryIds[0])?.name ?? "1 territorio";
-  }
-
-  return `${territoryIds.length} territorios`;
-}
-
-async function fetchTerritoryLevelsOrFallback() {
-  try {
-    const loadedLevels = await fetchTerritoryLevels();
-    return loadedLevels.length > 0 ? loadedLevels : FALLBACK_TERRITORY_LEVELS;
-  } catch {
-    return FALLBACK_TERRITORY_LEVELS;
-  }
-}
 
 export function App() {
   const [indicatorsByLevel, setIndicatorsByLevel] = useState<Partial<Record<TerritoryLevelId, string[]>>>({});
@@ -134,7 +60,7 @@ export function App() {
   useEffect(() => {
     async function loadInitialMetadata() {
       try {
-        const levels = await fetchTerritoryLevelsOrFallback();
+        const levels = await getTerritoryLevelsOrFallback(fetchTerritoryLevels);
         const initialTerritoryLevel = getInitialTerritoryLevel(levels);
         const [loadedIndicators, loadedTerritories] = await Promise.all([
           fetchIndicators(initialTerritoryLevel),

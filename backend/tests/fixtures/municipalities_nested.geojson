@@ -1,0 +1,28 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "codigo": "001",
+        "nombre": "Municipio Uno",
+        "provincia": {
+          "id": "02"
+        }
+      },
+      "geometry": {
+        "type": "MultiPolygon",
+        "coordinates": [
+          [
+            [
+              [0, 0],
+              [1, 0],
+              [1, 1],
+              [0, 0]
+            ]
+          ]
+        ]
+      }
+    }
+  ]
+}

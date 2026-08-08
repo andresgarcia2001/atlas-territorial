@@ -82,6 +82,27 @@ Aplicar migraciones manualmente:
 docker compose exec backend alembic -c alembic.ini upgrade head
 ```
 
+## Tests
+
+Backend:
+
+```powershell
+python -m pip install -r backend/requirements-dev.txt
+python -m pytest
+```
+
+El test de migraciones crea una base temporal y requiere una PostGIS accesible. Usa
+por defecto `localhost:5432` con usuario y password `territorio`; se puede ajustar
+con `TEST_POSTGRES_HOST`, `TEST_POSTGRES_PORT`, `TEST_POSTGRES_USER`,
+`TEST_POSTGRES_PASSWORD` y `TEST_POSTGRES_ADMIN_DB`.
+
+Frontend:
+
+```powershell
+cd frontend
+npm run test:unit
+```
+
 ## Cargar territorios
 
 El loader principal es:
