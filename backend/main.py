@@ -1,8 +1,14 @@
-﻿import os
+import os
 
-import psycopg
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+
+from repositories import (
+    fetch_indicator_names,
+    fetch_map_data,
+    fetch_territories_with_geometry,
+    fetch_territory_options,
+)
 
 app = FastAPI(title="Territorio Argentino API")
 
@@ -21,15 +27,6 @@ app.add_middleware(
 )
 
 
-def get_connection():
-    return psycopg.connect(
-        host=os.getenv("POSTGRES_HOST", "db"),
-        dbname=os.getenv("POSTGRES_DB", "territorio_argentino"),
-        user=os.getenv("POSTGRES_USER", "territorio"),
-        password=os.getenv("POSTGRES_PASSWORD", "territorio"),
-    )
-
-
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -37,19 +34,7 @@ def health():
 
 @app.get("/territories")
 def list_territories():
-    query = """
-        SELECT
-          id,
-          name,
-          ST_AsGeoJSON(geom)::json AS geometry
-        FROM territories
-        ORDER BY name;
-    """
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query)
-            rows = cur.fetchall()
+    rows = fetch_territories_with_geometry()
 
     return {
         "type": "FeatureCollection",
@@ -69,16 +54,7 @@ def list_territories():
 
 @app.get("/territory-options")
 def list_territory_options():
-    query = """
-        SELECT id, name
-        FROM territories
-        ORDER BY name;
-    """
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query)
-            rows = cur.fetchall()
+    rows = fetch_territory_options()
 
     return {
         "territories": [
@@ -93,16 +69,7 @@ def list_territory_options():
 
 @app.get("/indicators")
 def list_indicators():
-    query = """
-        SELECT DISTINCT indicator_name
-        FROM indicators
-        ORDER BY indicator_name;
-    """
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query)
-            rows = cur.fetchall()
+    rows = fetch_indicator_names()
 
     return {"indicators": [row[0] for row in rows]}
 
@@ -113,25 +80,7 @@ def get_map_data(
     year: int = 2022,
     province_ids: list[str] | None = Query(default=None),
 ):
-    query = """
-        SELECT
-          t.id,
-          t.name,
-          ST_AsGeoJSON(t.geom)::json AS geometry,
-          i.indicator_value
-        FROM territories t
-        LEFT JOIN indicators i
-          ON i.territory_id = t.id
-         AND i.indicator_name = %s
-         AND i.year = %s
-        WHERE (%s::text[] IS NULL OR t.id = ANY(%s::text[]))
-        ORDER BY t.name;
-    """
-
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(query, (indicator, year, province_ids, province_ids))
-            rows = cur.fetchall()
+    rows = fetch_map_data(indicator, year, province_ids)
 
     return {
         "type": "FeatureCollection",

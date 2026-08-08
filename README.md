@@ -8,7 +8,8 @@ Visor territorial local con PostgreSQL/PostGIS, FastAPI, React y MapLibre.
 ## Servicios
 
 - `db`: PostgreSQL con PostGIS.
-- `backend`: API FastAPI que publica territorios, indicadores y GeoJSON para el mapa.
+- `backend`: API FastAPI que aplica migraciones Alembic y publica territorios,
+  indicadores y GeoJSON para el mapa.
 - `frontend`: visor React + MapLibre con modos 2D y 3D.
 - `loader`: tarea manual para cargar el GeoJSON real en PostGIS.
 
@@ -17,7 +18,7 @@ Visor territorial local con PostgreSQL/PostGIS, FastAPI, React y MapLibre.
 ```mermaid
 flowchart LR
   frontend[frontend<br/>React + MapLibre] --> backend[backend<br/>FastAPI]
-  backend --> db[(db<br/>PostgreSQL + PostGIS)]
+  backend -->|API + Alembic| db[(db<br/>PostgreSQL + PostGIS)]
   loader[loader<br/>load_provinces.py] --> db
   data[(data<br/>GeoJSON provincias)] -.-> loader
 ```
@@ -41,10 +42,28 @@ reemplazarlo por `docker-compose`.
 docker compose up -d --build
 ```
 
+Al arrancar, el backend ejecuta las migraciones Alembic antes de iniciar la API.
+
 Abrir:
 
 ```text
 http://localhost:5173
+```
+
+## Migraciones
+
+El esquema de base se versiona con Alembic en `backend/alembic/versions`.
+
+Ver revision aplicada:
+
+```powershell
+docker compose exec backend alembic -c alembic.ini current
+```
+
+Aplicar migraciones manualmente:
+
+```powershell
+docker compose exec backend alembic -c alembic.ini upgrade head
 ```
 
 ## Cargar provincias reales
@@ -85,11 +104,11 @@ Y calcula indicadores derivados:
 El modo 3D no usa elevacion real del terreno: la altura representa el valor del indicador
 seleccionado.
 
-## Pasos rápidos para levantarlo
+## Pasos rapidos para levantarlo
 
 1. Abrir VS Code.
 2. Abrir la carpeta `atlas-territorial`.
-3. Abrir una terminal en la raíz del proyecto.
+3. Abrir una terminal en la raiz del proyecto.
 4. Ejecutar:
 
 ```powershell

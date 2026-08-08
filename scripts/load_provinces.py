@@ -26,6 +26,7 @@ def read_geojson(path):
 def get_connection():
     return psycopg.connect(
         host=os.getenv("POSTGRES_HOST", "db"),
+        port=os.getenv("POSTGRES_PORT", "5432"),
         dbname=os.getenv("POSTGRES_DB", "territorio_argentino"),
         user=os.getenv("POSTGRES_USER", "territorio"),
         password=os.getenv("POSTGRES_PASSWORD", "territorio"),

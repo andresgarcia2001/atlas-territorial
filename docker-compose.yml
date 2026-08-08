@@ -10,7 +10,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/schema01.sql:/docker-entrypoint-initdb.d/schema01.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -21,6 +20,7 @@ services:
     container_name: territorio_argentino_backend
     environment:
       POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-territorio_argentino}
       POSTGRES_USER: ${POSTGRES_USER:-territorio}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-territorio}
@@ -50,6 +50,7 @@ services:
     working_dir: /scripts
     environment:
       POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
       POSTGRES_DB: ${POSTGRES_DB:-territorio_argentino}
       POSTGRES_USER: ${POSTGRES_USER:-territorio}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-territorio}
@@ -60,6 +61,8 @@ services:
     command: ["python", "load_provinces.py"]
     depends_on:
       db:
+        condition: service_healthy
+      backend:
         condition: service_healthy
     
   frontend:
