@@ -317,6 +317,11 @@ def derive_indicators(cur, level):
     )
 
 
+def refresh_map_data_materialized_view(cur):
+    cur.execute("REFRESH MATERIALIZED VIEW territory_indicator_map_data_mv;")
+    print("Refreshed territory_indicator_map_data_mv")
+
+
 def load_dataset(cur, config, known_territory_ids):
     data_path = configured_path(config)
     geojson_path = Path(data_path)
@@ -413,6 +418,7 @@ def main():
             known_territory_ids = fetch_existing_territory_ids(cur)
             for config in DATASETS:
                 total_loaded += load_dataset(cur, config, known_territory_ids)
+            refresh_map_data_materialized_view(cur)
 
     print(f"Loaded {total_loaded} territorial features")
 

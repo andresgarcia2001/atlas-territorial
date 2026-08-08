@@ -70,3 +70,52 @@ def test_property_helpers_return_nested_paths():
     assert load_territories.get_property(properties, "provincia.nombre") is None
     assert load_territories.has_property(properties, "provincia.id")
     assert "provincia.id" in load_territories.flatten_property_names(properties)
+
+
+def test_refresh_map_data_materialized_view_executes_refresh():
+    class FakeCursor:
+        def __init__(self):
+            self.queries = []
+
+        def execute(self, query):
+            self.queries.append(query)
+
+    cur = FakeCursor()
+
+    load_territories.refresh_map_data_materialized_view(cur)
+
+    assert cur.queries == ["REFRESH MATERIALIZED VIEW territory_indicator_map_data_mv;"]
+
+
+def test_main_refreshes_map_data_materialized_view_after_loading(monkeypatch):
+    events = []
+
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+    class FakeConnection:
+        def __init__(self):
+            self.cur = FakeCursor()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def cursor(self):
+            return self.cur
+
+    monkeypatch.setattr(load_territories, "DATASETS", ("dataset",))
+    monkeypatch.setattr(load_territories, "get_connection", lambda: FakeConnection())
+    monkeypatch.setattr(load_territories, "fetch_existing_territory_ids", lambda cur: set())
+    monkeypatch.setattr(load_territories, "load_dataset", lambda cur, config, known_ids: events.append("load") or 1)
+    monkeypatch.setattr(load_territories, "refresh_map_data_materialized_view", lambda cur: events.append("refresh"))
+
+    load_territories.main()
+
+    assert events == ["load", "refresh"]

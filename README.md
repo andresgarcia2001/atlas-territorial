@@ -147,6 +147,23 @@ El loader solo guarda `parent_id` si el territorio padre ya existe. Si el codigo
 provincia/municipio del dataset fuente no coincide con los IDs cargados, carga la
 geometria y deja esa relacion pendiente.
 
+## Materialized View de mapa
+
+`/map-data` lee desde `territory_indicator_map_data_mv`, una Materialized View que
+precalcula el GeoJSON y los valores por territorio, indicador y anio. Esto evita
+repetir el join y `ST_AsGeoJSON` en cada request del mapa.
+
+La vista puede quedar desactualizada si se insertan o actualizan territorios o
+indicadores manualmente. El loader ejecuta:
+
+```sql
+REFRESH MATERIALIZED VIEW territory_indicator_map_data_mv;
+```
+
+como ultimo paso de la carga, despues de insertar territorios e indicadores. Si se
+modifican datos fuera del loader, ejecutar ese refresh manualmente antes de comparar
+resultados en la API.
+
 ## API territorial
 
 Endpoints principales:

@@ -85,6 +85,111 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
                     "parent_id",
                     "metadata",
                 } <= columns
+
+                cur.execute(
+                    """
+                    SELECT to_regclass('public.territory_indicator_map_data_mv');
+                    """
+                )
+                assert cur.fetchone()[0] == "territory_indicator_map_data_mv"
+
+                cur.execute(
+                    """
+                    SELECT indexname
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND tablename = 'territory_indicator_map_data_mv';
+                    """
+                )
+                assert {
+                    "territory_indicator_map_data_mv_key_idx",
+                    "territory_indicator_map_data_mv_filter_idx",
+                    "territory_indicator_map_data_mv_parent_idx",
+                    "territory_indicator_map_data_mv_id_indicator_year_idx",
+                } <= {row[0] for row in cur.fetchall()}
+
+                cur.execute(
+                    """
+                    INSERT INTO territories (
+                      id,
+                      name,
+                      level_id,
+                      source,
+                      external_id,
+                      parent_id,
+                      geom
+                    )
+                    VALUES
+                      (
+                        'provincia_a',
+                        'A Provincia',
+                        'province',
+                        'fixture',
+                        'a',
+                        NULL,
+                        ST_Multi(ST_GeomFromText('POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))', 4326))
+                      ),
+                      (
+                        'provincia_b',
+                        'B Provincia',
+                        'province',
+                        'fixture',
+                        'b',
+                        NULL,
+                        ST_Multi(ST_GeomFromText('POLYGON((2 2, 3 2, 3 3, 2 3, 2 2))', 4326))
+                      );
+                    """
+                )
+                cur.execute(
+                    """
+                    INSERT INTO indicators (
+                      territory_id,
+                      indicator_name,
+                      indicator_value,
+                      source,
+                      year
+                    )
+                    VALUES ('provincia_a', 'poblacion_total', 10, 'fixture', 2022);
+                    """
+                )
+
+                from scripts import load_territories
+
+                load_territories.refresh_map_data_materialized_view(cur)
+
+                cur.execute(
+                    """
+                    SELECT
+                      t.id,
+                      t.name,
+                      t.level_id,
+                      t.source,
+                      t.external_id,
+                      t.parent_id,
+                      ST_AsGeoJSON(t.geom)::json AS geometry,
+                      i.indicator_value
+                    FROM territories t
+                    LEFT JOIN indicators i
+                      ON i.territory_id = t.id
+                     AND i.indicator_name = %s
+                     AND i.year = %s
+                    WHERE t.level_id = %s
+                    ORDER BY t.name;
+                    """,
+                    ("poblacion_total", 2022, "province"),
+                )
+                legacy_rows = cur.fetchall()
+
+        from repositories import fetch_map_data
+
+        assert fetch_map_data("poblacion_total", 2022, "province") == legacy_rows
+
+        command.downgrade(config, "202608080002")
+
+        with psycopg.connect(**target_settings) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT to_regclass('public.territory_indicator_map_data_mv');")
+                assert cur.fetchone()[0] is None
     finally:
         with connect_or_skip(admin_settings, autocommit=True) as conn:
             with conn.cursor() as cur:

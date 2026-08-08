@@ -81,28 +81,41 @@ def fetch_indicator_names(level=None, year=None):
 def fetch_map_data(indicator, year, level=DEFAULT_TERRITORY_LEVEL, territory_ids=None, parent_id=None):
     query = """
         SELECT
-          t.id,
-          t.name,
-          t.level_id,
-          t.source,
-          t.external_id,
-          t.parent_id,
-          ST_AsGeoJSON(t.geom)::json AS geometry,
-          i.indicator_value
-        FROM territories t
-        LEFT JOIN indicators i
-          ON i.territory_id = t.id
-         AND i.indicator_name = %s
-         AND i.year = %s
-        WHERE t.level_id = %s
-          AND (%s::text IS NULL OR t.parent_id = %s)
-          AND (%s::text[] IS NULL OR t.id = ANY(%s::text[]))
-        ORDER BY t.name;
+          mv.id,
+          mv.name,
+          mv.level_id,
+          mv.source,
+          mv.external_id,
+          mv.parent_id,
+          mv.geometry,
+          mv.indicator_value
+        FROM territory_indicator_map_data_mv mv
+        WHERE mv.level_id = %s
+          AND (
+            (mv.indicator_name = %s AND mv.year = %s)
+            OR (
+              mv.indicator_name IS NULL
+              AND mv.year IS NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM territory_indicator_map_data_mv selected
+                WHERE selected.id = mv.id
+                  AND selected.indicator_name = %s
+                  AND selected.year = %s
+              )
+            )
+          )
+          AND (%s::text IS NULL OR mv.parent_id = %s)
+          AND (%s::text[] IS NULL OR mv.id = ANY(%s::text[]))
+        ORDER BY mv.name;
     """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query, (indicator, year, level, parent_id, parent_id, territory_ids, territory_ids))
+            cur.execute(
+                query,
+                (level, indicator, year, indicator, year, parent_id, parent_id, territory_ids, territory_ids),
+            )
             return cur.fetchall()
 
 
