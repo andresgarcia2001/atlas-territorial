@@ -1,7 +1,9 @@
 import json
 import os
 import re
+import unicodedata
 from dataclasses import dataclass
+from typing import Mapping
 from pathlib import Path
 
 import psycopg
@@ -9,6 +11,56 @@ import psycopg
 
 YEAR = 2022
 DERIVED_SOURCE = "derived"
+PROVINCE_CODE_BY_NAME = {
+    "ciudad autonoma de buenos aires": "02",
+    "caba": "02",
+    "buenos aires": "06",
+    "provincia de buenos aires": "06",
+    "catamarca": "10",
+    "provincia de catamarca": "10",
+    "cordoba": "14",
+    "provincia de cordoba": "14",
+    "corrientes": "18",
+    "provincia de corrientes": "18",
+    "chaco": "22",
+    "provincia del chaco": "22",
+    "chubut": "26",
+    "provincia del chubut": "26",
+    "entre rios": "30",
+    "provincia de entre rios": "30",
+    "formosa": "34",
+    "provincia de formosa": "34",
+    "jujuy": "38",
+    "provincia de jujuy": "38",
+    "la pampa": "42",
+    "provincia de la pampa": "42",
+    "la rioja": "46",
+    "provincia de la rioja": "46",
+    "mendoza": "50",
+    "provincia de mendoza": "50",
+    "misiones": "54",
+    "provincia de misiones": "54",
+    "neuquen": "58",
+    "provincia del neuquen": "58",
+    "rio negro": "62",
+    "provincia de rio negro": "62",
+    "salta": "66",
+    "provincia de salta": "66",
+    "san juan": "70",
+    "provincia de san juan": "70",
+    "san luis": "74",
+    "provincia de san luis": "74",
+    "santa cruz": "78",
+    "provincia de santa cruz": "78",
+    "santa fe": "82",
+    "provincia de santa fe": "82",
+    "santiago del estero": "86",
+    "provincia de santiago del estero": "86",
+    "tucuman": "90",
+    "provincia de tucuman": "90",
+    "tierra del fuego antartida e islas del atlantico sur": "94",
+    "provincia de tierra del fuego antartida e islas del atlantico sur": "94",
+}
 
 
 @dataclass(frozen=True)
@@ -23,9 +75,14 @@ class DatasetConfig:
     id_property_candidates: tuple[str, ...]
     name_property_env: str
     name_property_candidates: tuple[str, ...]
+    id_from_name_map: Mapping[str, str] | None = None
+    id_must_match_pattern: str | None = None
+    require_unique_external_id: bool = False
     parent_id_prefix: str | None = None
     parent_property_env: str | None = None
     parent_property_candidates: tuple[str, ...] = ()
+    derive_parent_from_external_id_prefix_length: int | None = None
+    require_parent_id: bool = False
     indicators: dict[str, str] | None = None
     required_by_default: bool = False
 
@@ -39,9 +96,12 @@ DATASETS = (
         default_path="/data/poblacion_provincias_indec_2022.geojson",
         id_prefix="provincia",
         id_property_env="PROVINCE_ID_PROPERTY",
-        id_property_candidates=("gid", "id"),
+        id_property_candidates=("cod_prov", "codprov", "provincia.id", "provincia_id", "id_provincia"),
         name_property_env="PROVINCE_NAME_PROPERTY",
         name_property_candidates=("nam", "fna", "name", "nombre", "nombre_completo"),
+        id_from_name_map=PROVINCE_CODE_BY_NAME,
+        id_must_match_pattern=r"^\d{2}$",
+        require_unique_external_id=True,
         indicators={
             "poblacion_total": "tpvpsc",
             "mujeres": "mftvp",
@@ -53,14 +113,16 @@ DATASETS = (
     DatasetConfig(
         name="ign_municipalities",
         level="municipality",
-        source="IGN",
+        source="IGN WFS ign:municipio",
         path_env="IGN_MUNICIPALITIES_GEOJSON",
-        default_path="/data/ign_municipios.geojson",
+        default_path="/data/municipios_ign.geojson",
         id_prefix="municipio",
         id_property_env="IGN_MUNICIPALITY_ID_PROPERTY",
-        id_property_candidates=("id", "gid", "codigo", "codigo_indec", "cod_municipio", "CODMUNI", "link"),
+        id_property_candidates=("in1", "codigo", "codigo_indec", "cod_municipio", "CODMUNI", "link"),
         name_property_env="IGN_MUNICIPALITY_NAME_PROPERTY",
         name_property_candidates=("nam", "nombre", "nombre_completo", "name", "fna", "municipio", "NOMMUNI"),
+        id_must_match_pattern=r"^\d{6}$",
+        require_unique_external_id=True,
         parent_id_prefix="provincia",
         parent_property_env="IGN_MUNICIPALITY_PARENT_PROPERTY",
         parent_property_candidates=(
@@ -72,6 +134,8 @@ DATASETS = (
             "cod_prov",
             "CODPROV",
         ),
+        derive_parent_from_external_id_prefix_length=2,
+        require_parent_id=True,
     ),
     DatasetConfig(
         name="census_radii",
@@ -124,8 +188,91 @@ def normalize_identifier(value):
     return normalized.strip("_")
 
 
+def normalize_label(value):
+    normalized = unicodedata.normalize("NFKD", str(value))
+    normalized = normalized.encode("ascii", "ignore").decode("ascii")
+    normalized = normalized.lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", normalized)
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
+
+
 def build_territory_id(prefix, external_id):
     return f"{prefix}_{normalize_identifier(external_id)}"
+
+
+def resolve_external_id(config, properties, id_property, name):
+    if id_property:
+        external_id = get_property(properties, id_property)
+        if external_id is not None and str(external_id).strip():
+            return str(external_id).strip()
+
+    if config.id_from_name_map:
+        normalized_name = normalize_label(name)
+        external_id = config.id_from_name_map.get(normalized_name)
+        if external_id:
+            return external_id
+
+        raise SystemExit(
+            f"No se pudo mapear el codigo canonico para {config.name}: {name}. "
+            f"Agregue un alias explicito antes de cargar este dataset."
+        )
+
+    raise SystemExit(f"No se pudo resolver el identificador para {config.name}: {name}.")
+
+
+def validate_external_id(config, external_id, name):
+    if not config.id_must_match_pattern:
+        return
+
+    if re.fullmatch(config.id_must_match_pattern, external_id):
+        return
+
+    raise SystemExit(
+        f"Identificador invalido para {config.name}: {name} tiene {external_id!r}. "
+        f"Debe cumplir {config.id_must_match_pattern}."
+    )
+
+
+def resolve_parent_external_id(config, properties, parent_property, external_id, name):
+    if parent_property:
+        parent_external_id = get_property(properties, parent_property)
+        if parent_external_id is not None and str(parent_external_id).strip():
+            return str(parent_external_id).strip()
+
+    if config.derive_parent_from_external_id_prefix_length:
+        prefix_length = config.derive_parent_from_external_id_prefix_length
+        if len(external_id) >= prefix_length:
+            return external_id[:prefix_length]
+
+    if config.require_parent_id:
+        raise SystemExit(
+            f"No se pudo resolver el padre para {config.name}: {name}. "
+            f"Revise las propiedades de provincia o el codigo externo."
+        )
+
+    return None
+
+
+def validate_dataset(config, features, id_property, name_property):
+    if not config.require_unique_external_id:
+        return
+
+    seen_external_ids = {}
+
+    for feature in features:
+        properties = feature["properties"]
+        name = str(get_property(properties, name_property))
+        external_id = resolve_external_id(config, properties, id_property, name)
+        validate_external_id(config, external_id, name)
+
+        if external_id in seen_external_ids:
+            raise SystemExit(
+                f"Identificador duplicado para {config.name}: {external_id!r} aparece en "
+                f"{seen_external_ids[external_id]} y {name}. Resuelva el duplicado antes de cargar."
+            )
+
+        seen_external_ids[external_id] = name
 
 
 def get_property(properties, property_path):
@@ -349,6 +496,7 @@ def load_dataset(cur, config, known_territory_ids):
         os.getenv(config.id_property_env),
         config.id_property_candidates,
         f"{config.name}.id",
+        required=config.id_from_name_map is None,
     )
     name_property = resolve_property(
         first_properties,
@@ -367,18 +515,28 @@ def load_dataset(cur, config, known_territory_ids):
             required=False,
         )
 
+    validate_dataset(config, features, id_property, name_property)
+
     missing_parent_count = 0
 
     for feature in features:
         properties = feature["properties"]
-        external_id = str(get_property(properties, id_property))
+        name = str(get_property(properties, name_property))
+        external_id = resolve_external_id(config, properties, id_property, name)
+        validate_external_id(config, external_id, name)
         territory_id = build_territory_id(config.id_prefix, external_id)
         parent_id = None
-        parent_external_id = get_property(properties, parent_property) if parent_property else None
+        parent_external_id = resolve_parent_external_id(config, properties, parent_property, external_id, name)
 
         if parent_external_id is not None and config.parent_id_prefix:
             parent_id = build_territory_id(config.parent_id_prefix, parent_external_id)
             if parent_id not in known_territory_ids:
+                if config.require_parent_id:
+                    raise SystemExit(
+                        f"No se encontro el territorio padre {parent_id} para {config.name}: {name}. "
+                        f"Cargue primero el nivel padre con IDs canonicos."
+                    )
+
                 parent_id = None
                 missing_parent_count += 1
 
@@ -386,7 +544,7 @@ def load_dataset(cur, config, known_territory_ids):
             cur,
             config,
             territory_id,
-            str(get_property(properties, name_property)),
+            name,
             external_id,
             parent_id,
             properties,

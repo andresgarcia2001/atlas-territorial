@@ -143,9 +143,15 @@ Cuando un GeoJSON use nombres de columnas distintos, configurar:
 
 Las propiedades pueden ser simples, como `nombre`, o anidadas, como `provincia.id`.
 
-El loader solo guarda `parent_id` si el territorio padre ya existe. Si el codigo de
-provincia/municipio del dataset fuente no coincide con los IDs cargados, carga la
-geometria y deja esa relacion pendiente.
+El loader usa IDs canonicos para provincias (`provincia_<cod_prov>`) y municipios
+IGN (`municipio_<in1>`). Para el GeoJSON provincial incluido, el codigo de
+provincia se deriva por nombre usando el mapa documentado en `data/README.md`;
+no se usa `gid` como ID canonico.
+
+Para municipios IGN, `in1` debe existir, ser unico y tener seis digitos. El
+`parent_id` se deriva de los dos primeros digitos de `in1` y debe existir como
+provincia cargada. Si falta el padre, el loader falla en vez de cargar
+municipios huerfanos.
 
 ## Materialized View de mapa
 
