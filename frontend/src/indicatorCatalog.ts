@@ -1,4 +1,4 @@
-export type IndicatorOption = {
+﻿export type IndicatorOption = {
   id: string;
   label: string;
 };
@@ -14,26 +14,20 @@ export const DEFAULT_INDICATOR = "poblacion_total";
 export const INDICATOR_GROUPS: IndicatorGroup[] = [
   {
     id: "population",
-    label: "Población",
+    label: "Poblacion",
     indicators: [
       { id: "poblacion_total", label: "Total" },
       { id: "mujeres", label: "Mujeres" },
       { id: "varones", label: "Varones" },
       { id: "otro_x", label: "Otro / X" },
-    ],
-  },
-  {
-    id: "gender",
-    label: "Género",
-    indicators: [
       { id: "porcentaje_mujeres", label: "% mujeres" },
       { id: "porcentaje_varones", label: "% varones" },
       { id: "porcentaje_otro_x", label: "% otro / X" },
     ],
   },
   {
-    id: "density",
-    label: "Densidad",
+    id: "territory",
+    label: "Territorio",
     indicators: [{ id: "densidad_poblacional", label: "Densidad poblacional" }],
   },
 ];

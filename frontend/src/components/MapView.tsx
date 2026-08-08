@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+﻿import { useEffect, useMemo, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -16,6 +16,7 @@ type StyleExpression = unknown[];
 type LoadedMapData = {
   data: MapData;
   indicator: string;
+  provinceKey: string;
   year: number;
 };
 
@@ -48,6 +49,10 @@ const PROVINCE_COLORS = [
   "#38bdf8",
   "#fb923c",
 ];
+
+function getProvinceFilterKey(provinceIds: string[]) {
+  return provinceIds.length === 0 ? "all" : provinceIds.join("|");
+}
 
 function formatIndicatorName(indicator: string) {
   return getIndicatorLabel(indicator);
@@ -194,7 +199,7 @@ function fitMapToData(map: maplibregl.Map, data: MapData) {
   }
 
   if (!bounds.isEmpty()) {
-    map.fitBounds(bounds, { padding: 48, duration: 0 });
+    map.fitBounds(bounds, { padding: 48, duration: 350 });
   }
 }
 
@@ -292,7 +297,7 @@ function addTerritoryLayers(
         .setHTML(`
           <strong>${escapeHtml(feature.properties.name)}</strong><br />
           ${escapeHtml(formatIndicatorName(feature.properties.indicator))}: ${formatValue(feature.properties.value)}<br />
-          A&ntilde;o: ${feature.properties.year}
+          Ano: ${feature.properties.year}
         `)
         .addTo(map);
     });
@@ -330,14 +335,15 @@ function renderTerritoryData(
   applyViewMode(map, layerSettings.viewMode);
 }
 
-export function MapView({ colorMode, indicator, onDataError, viewMode, year }: MapViewProps) {
+export function MapView({ colorMode, indicator, onDataError, provinceIds, viewMode, year }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const loadedDataRef = useRef<LoadedMapData | null>(null);
-  const latestLayerSettingsRef = useRef<LayerSettings>({ colorMode, indicator, viewMode });
-  const hasLoadedInitialDataRef = useRef(false);
+  const latestLayerSettingsRef = useRef<LayerSettings>({ colorMode, indicator, provinceIds, viewMode });
+  const lastFitKeyRef = useRef<string | null>(null);
+  const provinceKey = useMemo(() => getProvinceFilterKey(provinceIds), [provinceIds]);
 
-  latestLayerSettingsRef.current = { colorMode, indicator, viewMode };
+  latestLayerSettingsRef.current = { colorMode, indicator, provinceIds, viewMode };
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -391,18 +397,18 @@ export function MapView({ colorMode, indicator, onDataError, viewMode, year }: M
 
     async function loadData() {
       try {
-        const data = await fetchMapData(indicator, year);
+        const data = await fetchMapData(indicator, year, provinceIds);
 
         if (isCancelled) {
           return;
         }
 
         const applyData = () => {
-          const shouldFitMap = !hasLoadedInitialDataRef.current;
+          const shouldFitMap = lastFitKeyRef.current !== provinceKey;
 
-          loadedDataRef.current = { data, indicator, year };
+          loadedDataRef.current = { data, indicator, provinceKey, year };
           renderTerritoryData(mapInstance, data, latestLayerSettingsRef.current, shouldFitMap);
-          hasLoadedInitialDataRef.current = true;
+          lastFitKeyRef.current = provinceKey;
           onDataError?.(null);
         };
 
@@ -429,18 +435,24 @@ export function MapView({ colorMode, indicator, onDataError, viewMode, year }: M
     return () => {
       isCancelled = true;
     };
-  }, [indicator, onDataError, year]);
+  }, [indicator, onDataError, provinceIds, provinceKey, year]);
 
   useEffect(() => {
     const map = mapRef.current;
     const loadedData = loadedDataRef.current;
 
-    if (!map || !loadedData || loadedData.indicator !== indicator || loadedData.year !== year) {
+    if (
+      !map ||
+      !loadedData ||
+      loadedData.indicator !== indicator ||
+      loadedData.provinceKey !== provinceKey ||
+      loadedData.year !== year
+    ) {
       return;
     }
 
-    renderTerritoryData(map, loadedData.data, { colorMode, indicator, viewMode }, false);
-  }, [colorMode, indicator, viewMode, year]);
+    renderTerritoryData(map, loadedData.data, { colorMode, indicator, provinceIds, viewMode }, false);
+  }, [colorMode, indicator, provinceIds, provinceKey, viewMode, year]);
 
   return <main id="map" ref={containerRef} aria-label="Mapa de indicadores provinciales" />;
 }

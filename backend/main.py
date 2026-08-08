@@ -1,7 +1,7 @@
-import os
+﻿import os
 
 import psycopg
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Territorio Argentino API")
@@ -67,6 +67,30 @@ def list_territories():
     }
 
 
+@app.get("/territory-options")
+def list_territory_options():
+    query = """
+        SELECT id, name
+        FROM territories
+        ORDER BY name;
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query)
+            rows = cur.fetchall()
+
+    return {
+        "territories": [
+            {
+                "id": territory_id,
+                "name": name,
+            }
+            for territory_id, name in rows
+        ],
+    }
+
+
 @app.get("/indicators")
 def list_indicators():
     query = """
@@ -84,7 +108,11 @@ def list_indicators():
 
 
 @app.get("/map-data")
-def get_map_data(indicator: str = "poblacion_total", year: int = 2022):
+def get_map_data(
+    indicator: str = "poblacion_total",
+    year: int = 2022,
+    province_ids: list[str] | None = Query(default=None),
+):
     query = """
         SELECT
           t.id,
@@ -96,12 +124,13 @@ def get_map_data(indicator: str = "poblacion_total", year: int = 2022):
           ON i.territory_id = t.id
          AND i.indicator_name = %s
          AND i.year = %s
+        WHERE (%s::text[] IS NULL OR t.id = ANY(%s::text[]))
         ORDER BY t.name;
     """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query, (indicator, year))
+            cur.execute(query, (indicator, year, province_ids, province_ids))
             rows = cur.fetchall()
 
     return {

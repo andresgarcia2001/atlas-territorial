@@ -1,5 +1,14 @@
-export type IndicatorResponse = {
+﻿export type IndicatorResponse = {
   indicators: string[];
+};
+
+export type TerritoryOption = {
+  id: string;
+  name: string;
+};
+
+export type TerritoryOptionsResponse = {
+  territories: TerritoryOption[];
 };
 
 export type MultiPolygonGeometry = {
@@ -34,4 +43,5 @@ export type LayerSettings = {
   indicator: string;
   colorMode: ColorMode;
   viewMode: ViewMode;
+  provinceIds: string[];
 };
