@@ -1,0 +1,262 @@
+{
+  "generated_at": "2026-08-09T15:55:57Z",
+  "source_url": "https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetFeature&typeName=ign:municipio&outputFormat=application/json&srsName=EPSG:4326",
+  "source_layer": "ign:municipio",
+  "output_policy": "The normalized GeoJSON is written only when has_blockers is false.",
+  "feature_count": 2114,
+  "valid_in1_count": 2106,
+  "has_blockers": true,
+  "blocking_issues": [
+    {
+      "type": "missing_in1",
+      "count": 8,
+      "features": [
+        {
+          "feature_id": "municipio.5239",
+          "gid": 5239,
+          "name": "Isla Las Lechiguanas",
+          "gna": "Junta",
+          "in1": ""
+        },
+        {
+          "feature_id": "municipio.5271",
+          "gid": 5271,
+          "name": "G\u00fcer Aike",
+          "gna": "",
+          "in1": ""
+        },
+        {
+          "feature_id": "municipio.6169",
+          "gid": 6169,
+          "name": "Malvinas",
+          "gna": "Municipio",
+          "in1": ""
+        },
+        {
+          "feature_id": "municipio.5461",
+          "gid": 5461,
+          "name": "Salto Encantado",
+          "gna": "Municipio",
+          "in1": ""
+        },
+        {
+          "feature_id": "municipio.6201",
+          "gid": 6201,
+          "name": "El Caim\u00e1n",
+          "gna": "Municipio",
+          "in1": ""
+        },
+        {
+          "feature_id": "municipio.5702",
+          "gid": 5702,
+          "name": "Colonia Cerrito",
+          "gna": "Junta",
+          "in1": ""
+        },
+        {
+          "feature_id": "municipio.6130",
+          "gid": 6130,
+          "name": "Colonia Teresa",
+          "gna": "Municipio",
+          "in1": ""
+        },
+        {
+          "feature_id": "municipio.6178",
+          "gid": 6178,
+          "name": "Manuel Derqui",
+          "gna": "Municipio",
+          "in1": ""
+        }
+      ]
+    },
+    {
+      "type": "duplicate_in1",
+      "count": 2,
+      "groups": {
+        "220476": [
+          {
+            "feature_id": "municipio.5240",
+            "gid": 5240,
+            "name": "Machagai",
+            "gna": "Municipio",
+            "in1": "220476"
+          },
+          {
+            "feature_id": "municipio.5248",
+            "gid": 5248,
+            "name": "Machagai",
+            "gna": "Municipio",
+            "in1": "220476"
+          }
+        ],
+        "822784": [
+          {
+            "feature_id": "municipio.5987",
+            "gid": 5987,
+            "name": "El Rab\u00f3n",
+            "gna": "Comuna",
+            "in1": "822784"
+          },
+          {
+            "feature_id": "municipio.6094",
+            "gid": 6094,
+            "name": "Hardy",
+            "gna": "Comuna",
+            "in1": "822784"
+          }
+        ]
+      }
+    }
+  ],
+  "warnings": [
+    {
+      "type": "missing_expected_province_codes",
+      "codes": [
+        "86"
+      ]
+    }
+  ],
+  "observed_fields": [
+    "fdc",
+    "fna",
+    "gid",
+    "gna",
+    "in1",
+    "nam",
+    "sag"
+  ],
+  "province_counts": [
+    {
+      "cod_prov": "02",
+      "count": 15
+    },
+    {
+      "cod_prov": "06",
+      "count": 135
+    },
+    {
+      "cod_prov": "10",
+      "count": 36
+    },
+    {
+      "cod_prov": "14",
+      "count": 427
+    },
+    {
+      "cod_prov": "18",
+      "count": 74
+    },
+    {
+      "cod_prov": "22",
+      "count": 70
+    },
+    {
+      "cod_prov": "26",
+      "count": 46
+    },
+    {
+      "cod_prov": "30",
+      "count": 269
+    },
+    {
+      "cod_prov": "34",
+      "count": 37
+    },
+    {
+      "cod_prov": "38",
+      "count": 64
+    },
+    {
+      "cod_prov": "42",
+      "count": 80
+    },
+    {
+      "cod_prov": "46",
+      "count": 18
+    },
+    {
+      "cod_prov": "50",
+      "count": 18
+    },
+    {
+      "cod_prov": "54",
+      "count": 77
+    },
+    {
+      "cod_prov": "58",
+      "count": 57
+    },
+    {
+      "cod_prov": "62",
+      "count": 39
+    },
+    {
+      "cod_prov": "66",
+      "count": 60
+    },
+    {
+      "cod_prov": "70",
+      "count": 19
+    },
+    {
+      "cod_prov": "74",
+      "count": 66
+    },
+    {
+      "cod_prov": "78",
+      "count": 20
+    },
+    {
+      "cod_prov": "82",
+      "count": 364
+    },
+    {
+      "cod_prov": "90",
+      "count": 112
+    },
+    {
+      "cod_prov": "94",
+      "count": 3
+    }
+  ],
+  "government_type_counts": [
+    {
+      "value": "(empty)",
+      "count": 1
+    },
+    {
+      "value": "Comision",
+      "count": 1
+    },
+    {
+      "value": "Comisi\u00f3n",
+      "count": 128
+    },
+    {
+      "value": "Comuna",
+      "count": 605
+    },
+    {
+      "value": "Junta",
+      "count": 182
+    },
+    {
+      "value": "Junta de Gobierno",
+      "count": 3
+    },
+    {
+      "value": "Junta de gobierno",
+      "count": 1
+    },
+    {
+      "value": "Municipio",
+      "count": 1193
+    }
+  ],
+  "geometry_type_counts": [
+    {
+      "value": "MultiPolygon",
+      "count": 2114
+    }
+  ]
+}

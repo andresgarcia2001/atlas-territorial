@@ -68,7 +68,7 @@ services:
       CENSUS_RADII_SOURCE: ${CENSUS_RADII_SOURCE:-INDEC / IGN}
     volumes:
       - ./scripts:/scripts:ro
-      - ./data:/data:ro
+      - ./data:/data
     command: ["python", "load_territories.py"]
     depends_on:
       db:

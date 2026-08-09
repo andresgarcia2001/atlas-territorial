@@ -216,12 +216,22 @@ Implemented in `scripts/load_territories.py`:
 - Missing/invalid/duplicate municipality `in1` values are validation failures.
 - Missing required municipality parent provinces are validation failures.
 
+Implemented in `scripts/prepare_ign_municipalities.py`:
+
+- Downloads or reads the `ign:municipio` GeoJSON.
+- Adds `cod_prov = in1[0:2]` to valid rows.
+- Writes `data/municipios_ign_validation_report.json`.
+- Writes `data/municipios_ign.geojson` only when `has_blockers` is `false`.
+- Treats missing/invalid/duplicate `in1` and unknown province codes as blocking
+  issues.
+- Reports missing expected province prefixes as warnings.
+
 Remaining before loading the full IGN municipality polygons:
 
 1. Resolve the inspected `ign:municipio` source issues: eight rows with missing
    `in1` and duplicate codes `220476` and `822784`.
 2. Download or normalize the full `ign:municipio` GeoJSON into
    `data/municipios_ign_<YYYY-MM-DD>.geojson`.
-3. Add a validation/preprocessing script that checks `in1`, derives `cod_prov`,
-   reports duplicates/missing codes, and refuses to produce a loader-ready file
-   while blocking issues remain.
+3. When the report has no blockers, either keep the generated default
+   `data/municipios_ign.geojson` for the loader or copy it to a dated filename
+   and set `IGN_MUNICIPALITIES_GEOJSON`.

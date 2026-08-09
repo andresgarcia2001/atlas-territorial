@@ -105,6 +105,17 @@ npm run test:unit
 
 ## Cargar territorios
 
+Preparar municipios IGN:
+
+```powershell
+docker compose --profile tools run --rm loader python prepare_ign_municipalities.py
+```
+
+Ese comando descarga `ign:municipio` desde el WFS del IGN, deriva `cod_prov`
+desde `in1`, escribe `data/municipios_ign_validation_report.json` y solo genera
+`data/municipios_ign.geojson` si no hay bloqueantes. Si el reporte marca
+`has_blockers: true`, resolver esos casos antes de cargar municipios.
+
 El loader principal es:
 
 ```text

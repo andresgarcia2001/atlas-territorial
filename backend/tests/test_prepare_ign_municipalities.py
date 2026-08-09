@@ -1,0 +1,165 @@
+from pathlib import Path
+
+from scripts import prepare_ign_municipalities
+
+
+def polygon_feature(feature_id, properties):
+    return {
+        "type": "Feature",
+        "id": feature_id,
+        "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [[[[0, 0], [1, 0], [1, 1], [0, 0]]]],
+        },
+        "properties": properties,
+    }
+
+
+def feature_collection(features):
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+    }
+
+
+def test_validate_and_normalize_derives_cod_prov_for_valid_in1():
+    data = feature_collection(
+        [
+            polygon_feature(
+                "municipio.1",
+                {
+                    "gid": 1,
+                    "fna": "Municipio San Antonio de Areco",
+                    "gna": "Municipio",
+                    "nam": "San Antonio de Areco",
+                    "in1": "060735",
+                },
+            ),
+            polygon_feature(
+                "municipio.2",
+                {
+                    "gid": 2,
+                    "fna": "Comuna La Pampa",
+                    "gna": "Comuna",
+                    "nam": "La Pampa",
+                    "in1": "143183",
+                },
+            ),
+        ]
+    )
+
+    normalized_data, report = prepare_ign_municipalities.validate_and_normalize(data, source_url="fixture")
+
+    assert report["has_blockers"] is False
+    assert report["feature_count"] == 2
+    assert report["valid_in1_count"] == 2
+    assert report["province_counts"] == [{"cod_prov": "06", "count": 1}, {"cod_prov": "14", "count": 1}]
+    assert normalized_data["features"][0]["properties"]["cod_prov"] == "06"
+    assert normalized_data["features"][1]["properties"]["cod_prov"] == "14"
+
+
+def test_validate_and_normalize_reports_missing_invalid_duplicate_and_unknown_codes():
+    data = feature_collection(
+        [
+            polygon_feature("municipio.1", {"gid": 1, "gna": "Municipio", "nam": "Sin Codigo", "in1": ""}),
+            polygon_feature("municipio.2", {"gid": 2, "gna": "Municipio", "nam": "Codigo Corto", "in1": "60735"}),
+            polygon_feature("municipio.3", {"gid": 3, "gna": "Municipio", "nam": "Machagai A", "in1": "220476"}),
+            polygon_feature("municipio.4", {"gid": 4, "gna": "Municipio", "nam": "Machagai B", "in1": "220476"}),
+            polygon_feature("municipio.5", {"gid": 5, "gna": "Municipio", "nam": "Codigo Raro", "in1": "990001"}),
+        ]
+    )
+
+    _, report = prepare_ign_municipalities.validate_and_normalize(data, source_url="fixture")
+
+    assert report["has_blockers"] is True
+    assert [issue["type"] for issue in report["blocking_issues"]] == [
+        "missing_in1",
+        "invalid_in1",
+        "duplicate_in1",
+        "unknown_province_code",
+    ]
+    assert report["blocking_issues"][0]["features"][0]["name"] == "Sin Codigo"
+    assert report["blocking_issues"][1]["features"][0]["in1"] == "60735"
+    assert set(report["blocking_issues"][2]["groups"]) == {"220476"}
+    assert report["blocking_issues"][3]["features"][0]["in1"] == "990001"
+
+
+def test_prepare_writes_report_but_not_output_when_blocked(tmp_path):
+    input_path = tmp_path / "raw.geojson"
+    output_path = tmp_path / "municipios_ign.geojson"
+    report_path = tmp_path / "report.json"
+    input_path.write_text(
+        """
+        {
+          "type": "FeatureCollection",
+          "features": [
+            {
+              "type": "Feature",
+              "id": "municipio.1",
+              "geometry": {
+                "type": "MultiPolygon",
+                "coordinates": [[[[0, 0], [1, 0], [1, 1], [0, 0]]]]
+              },
+              "properties": {
+                "gid": 1,
+                "gna": "Municipio",
+                "nam": "Sin Codigo",
+                "in1": ""
+              }
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    exit_code = prepare_ign_municipalities.prepare(
+        input_path=Path(input_path),
+        output_path=Path(output_path),
+        report_path=Path(report_path),
+    )
+
+    assert exit_code == 2
+    assert report_path.is_file()
+    assert not output_path.exists()
+
+
+def test_prepare_writes_normalized_output_when_clean(tmp_path):
+    input_path = tmp_path / "raw.geojson"
+    output_path = tmp_path / "municipios_ign.geojson"
+    report_path = tmp_path / "report.json"
+    input_path.write_text(
+        """
+        {
+          "type": "FeatureCollection",
+          "features": [
+            {
+              "type": "Feature",
+              "id": "municipio.1",
+              "geometry": {
+                "type": "MultiPolygon",
+                "coordinates": [[[[0, 0], [1, 0], [1, 1], [0, 0]]]]
+              },
+              "properties": {
+                "gid": 1,
+                "gna": "Municipio",
+                "nam": "San Antonio de Areco",
+                "in1": "060735"
+              }
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    exit_code = prepare_ign_municipalities.prepare(
+        input_path=Path(input_path),
+        output_path=Path(output_path),
+        report_path=Path(report_path),
+    )
+
+    assert exit_code == 0
+    assert report_path.is_file()
+    assert output_path.is_file()
+    assert '"cod_prov": "06"' in output_path.read_text(encoding="utf-8")
