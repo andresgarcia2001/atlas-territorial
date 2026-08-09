@@ -114,13 +114,24 @@ npm run test:unit
 Preparar municipios IGN:
 
 ```powershell
-docker compose --profile tools run --rm loader python prepare_ign_municipalities.py
+docker-compose --profile tools run --rm loader python prepare_ign_municipalities.py
 ```
 
 Ese comando descarga `ign:municipio` desde el WFS del IGN, deriva `cod_prov`
 desde `in1`, escribe `data/municipios_ign_validation_report.json` y solo genera
 `data/municipios_ign.geojson` si no hay bloqueantes. Si el reporte marca
 `has_blockers: true`, resolver esos casos antes de cargar municipios.
+
+El preparador aplica automaticamente los overrides versionados en
+`data/municipality_in1_overrides.json` cuando ese archivo existe. Esos overrides
+solo deben usarse para matches verificados contra una fuente externa, y quedan
+registrados en el reporte de validacion.
+
+Tambien aplica las exclusiones aceptadas de
+`data/municipality_feature_exclusions.json` y las resoluciones de duplicados de
+`data/municipality_duplicate_resolutions.json`. Esas reglas permiten producir el
+GeoJSON del mapa sin cargar filas fuente que siguen sin identificador confiable
+ni perder geometria cuando dos filas representan el mismo municipio.
 
 Mientras `ign:municipio` no incluya poligonos para Santiago del Estero, se puede
 sumar el suplemento oficial de Georef:
@@ -142,7 +153,7 @@ scripts/load_territories.py
 Ejecutar:
 
 ```powershell
-docker compose --profile tools run --rm loader
+docker-compose --profile tools run --rm loader
 ```
 
 Dataset incluido por defecto:

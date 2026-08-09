@@ -85,6 +85,36 @@ Rows with missing `in1` must be quarantined or resolved manually before loading.
 Duplicate `in1` values must be resolved before upsert. Do not fall back to
 `gid`, because that would create unstable IDs across IGN refreshes.
 
+Four missing `in1` rows have explicit overrides in
+`data/municipality_in1_overrides.json`, based on exact-name matches and centroid
+containment against Georef `gobiernos-locales.geojson`:
+
+| IGN feature id | Name | Applied `in1` | Province |
+| --- | --- | --- | --- |
+| `municipio.5239` | Isla Las Lechiguanas | `309302` | Entre Rios |
+| `municipio.5461` | Salto Encantado | `540053` | Misiones |
+| `municipio.6130` | Colonia Teresa | `823704` | Santa Fe |
+| `municipio.6178` | Manuel Derqui | `180081` | Corrientes |
+
+The remaining missing `in1` rows are accepted exclusions in
+`data/municipality_feature_exclusions.json`. They are not loaded into the map
+artifact and do not block production; they can be added later if their
+administrative status is confirmed:
+
+| IGN feature id | Name | Current finding |
+| --- | --- | --- |
+| `municipio.5271` | Guer Aike | No Georef local-government name match; likely not a municipality polygon. |
+| `municipio.6169` | Malvinas | No exact Georef name match; centroid falls inside Esquina, Corrientes, so do not map to Malvinas Argentinas. |
+| `municipio.6201` | El Caiman | No exact Georef name match; centroid falls inside San Miguel, Corrientes. |
+| `municipio.5702` | Colonia Cerrito | No exact Georef name match; centroid falls inside Arroyo Corralito, Entre Rios. |
+
+Duplicate `in1` rows are resolved explicitly instead of relying on row order:
+
+| Source issue | Resolution |
+| --- | --- |
+| `822784` appears on `El Rabon` and `Hardy` | Keep `El Rabon = 822784`; recode `Hardy` to Georef `822808` via `data/municipality_in1_overrides.json`. |
+| `220476` appears on two `Machagai` features | Merge `municipio.5240` and `municipio.5248` into one `MultiPolygon` via `data/municipality_duplicate_resolutions.json`; no territory is dropped. |
+
 ### `ign:gobiernoslocales_2022`
 
 Do not use this as the map polygon layer: the sampled geometry is `MultiPoint`.
@@ -248,6 +278,12 @@ Implemented in `scripts/load_territories.py`:
 Implemented in `scripts/prepare_ign_municipalities.py`:
 
 - Downloads or reads the `ign:municipio` GeoJSON.
+- Applies explicit `in1` overrides from `data/municipality_in1_overrides.json`
+  when present.
+- Applies accepted source exclusions from
+  `data/municipality_feature_exclusions.json` when present.
+- Applies documented duplicate resolutions from
+  `data/municipality_duplicate_resolutions.json` when present.
 - Adds `cod_prov = in1[0:2]` to valid rows.
 - Writes `data/municipios_ign_validation_report.json`.
 - Writes `data/municipios_ign.geojson` only when `has_blockers` is `false`.
@@ -259,12 +295,10 @@ Implemented in `scripts/prepare_ign_municipalities.py`:
 
 Remaining before loading the full IGN municipality polygons:
 
-1. Resolve the inspected `ign:municipio` source issues: eight rows with missing
-   `in1` and duplicate codes `220476` and `822784`.
-2. Use `--georef-santiago` while the IGN municipality layer has no `86`
+1. Use `--georef-santiago` while the IGN municipality layer has no `86`
    polygons.
-3. Download or normalize the full `ign:municipio` GeoJSON into
+2. Download or normalize the full `ign:municipio` GeoJSON into
    `data/municipios_ign_<YYYY-MM-DD>.geojson`.
-4. When the report has no blockers, either keep the generated default
+3. When the report has no blockers, either keep the generated default
    `data/municipios_ign.geojson` for the loader or copy it to a dated filename
    and set `IGN_MUNICIPALITIES_GEOJSON`.

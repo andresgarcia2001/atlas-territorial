@@ -1,118 +1,22 @@
 {
-  "generated_at": "2026-08-09T20:59:08Z",
+  "generated_at": "2026-08-09T21:43:22Z",
   "source_url": "https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetFeature&typeName=ign:municipio&outputFormat=application/json&srsName=EPSG:4326",
   "source_layer": "ign:municipio",
   "output_policy": "The normalized GeoJSON is written only when has_blockers is false.",
-  "feature_count": 2279,
-  "valid_in1_count": 2271,
-  "has_blockers": true,
-  "blocking_issues": [
-    {
-      "type": "missing_in1",
-      "count": 8,
-      "features": [
-        {
-          "feature_id": "municipio.5239",
-          "gid": 5239,
-          "name": "Isla Las Lechiguanas",
-          "gna": "Junta",
-          "in1": ""
-        },
-        {
-          "feature_id": "municipio.5271",
-          "gid": 5271,
-          "name": "G\u00fcer Aike",
-          "gna": "",
-          "in1": ""
-        },
-        {
-          "feature_id": "municipio.6169",
-          "gid": 6169,
-          "name": "Malvinas",
-          "gna": "Municipio",
-          "in1": ""
-        },
-        {
-          "feature_id": "municipio.5461",
-          "gid": 5461,
-          "name": "Salto Encantado",
-          "gna": "Municipio",
-          "in1": ""
-        },
-        {
-          "feature_id": "municipio.6201",
-          "gid": 6201,
-          "name": "El Caim\u00e1n",
-          "gna": "Municipio",
-          "in1": ""
-        },
-        {
-          "feature_id": "municipio.5702",
-          "gid": 5702,
-          "name": "Colonia Cerrito",
-          "gna": "Junta",
-          "in1": ""
-        },
-        {
-          "feature_id": "municipio.6130",
-          "gid": 6130,
-          "name": "Colonia Teresa",
-          "gna": "Municipio",
-          "in1": ""
-        },
-        {
-          "feature_id": "municipio.6178",
-          "gid": 6178,
-          "name": "Manuel Derqui",
-          "gna": "Municipio",
-          "in1": ""
-        }
-      ]
-    },
-    {
-      "type": "duplicate_in1",
-      "count": 2,
-      "groups": {
-        "220476": [
-          {
-            "feature_id": "municipio.5240",
-            "gid": 5240,
-            "name": "Machagai",
-            "gna": "Municipio",
-            "in1": "220476"
-          },
-          {
-            "feature_id": "municipio.5248",
-            "gid": 5248,
-            "name": "Machagai",
-            "gna": "Municipio",
-            "in1": "220476"
-          }
-        ],
-        "822784": [
-          {
-            "feature_id": "municipio.5987",
-            "gid": 5987,
-            "name": "El Rab\u00f3n",
-            "gna": "Comuna",
-            "in1": "822784"
-          },
-          {
-            "feature_id": "municipio.6094",
-            "gid": 6094,
-            "name": "Hardy",
-            "gna": "Comuna",
-            "in1": "822784"
-          }
-        ]
-      }
-    }
-  ],
+  "feature_count": 2274,
+  "valid_in1_count": 2274,
+  "has_blockers": false,
+  "blocking_issues": [],
   "warnings": [],
   "observed_fields": [
     "categoria",
     "centroide",
     "cod_prov",
+    "duplicate_resolution_checked_at",
+    "duplicate_resolution_merged_feature_ids",
+    "duplicate_resolution_policy",
+    "duplicate_resolution_reason",
+    "duplicate_resolution_source",
     "fdc",
     "fna",
     "fuente",
@@ -120,6 +24,9 @@
     "gna",
     "id",
     "in1",
+    "in1_override_checked_at",
+    "in1_override_reason",
+    "in1_override_source",
     "nam",
     "nombre",
     "nombre_completo",
@@ -146,11 +53,11 @@
     },
     {
       "cod_prov": "18",
-      "count": 74
+      "count": 75
     },
     {
       "cod_prov": "22",
-      "count": 70
+      "count": 69
     },
     {
       "cod_prov": "26",
@@ -158,7 +65,7 @@
     },
     {
       "cod_prov": "30",
-      "count": 269
+      "count": 270
     },
     {
       "cod_prov": "34",
@@ -182,7 +89,7 @@
     },
     {
       "cod_prov": "54",
-      "count": 77
+      "count": 78
     },
     {
       "cod_prov": "58",
@@ -210,7 +117,7 @@
     },
     {
       "cod_prov": "82",
-      "count": 364
+      "count": 365
     },
     {
       "cod_prov": "86",
@@ -226,10 +133,6 @@
     }
   ],
   "government_type_counts": [
-    {
-      "value": "(empty)",
-      "count": 1
-    },
     {
       "value": "Comision",
       "count": 1
@@ -248,7 +151,7 @@
     },
     {
       "value": "Junta",
-      "count": 182
+      "count": 181
     },
     {
       "value": "Junta de Gobierno",
@@ -260,13 +163,13 @@
     },
     {
       "value": "Municipio",
-      "count": 1220
+      "count": 1217
     }
   ],
   "geometry_type_counts": [
     {
       "value": "MultiPolygon",
-      "count": 2115
+      "count": 2110
     },
     {
       "value": "Polygon",
@@ -303,15 +206,134 @@
       ]
     }
   ],
-  "filtered_output": {
-    "enabled": true,
-    "policy": "Exploratory output only: skipped invalid, unknown-province, and duplicate municipality codes.",
-    "feature_count": 2269,
-    "skipped_counts": {
-      "missing_in1": 8,
-      "invalid_in1": 0,
-      "duplicate_in1": 2,
-      "unknown_province_code": 0
+  "overrides": [
+    {
+      "source": "municipality_in1_overrides",
+      "feature_count": 5,
+      "features": [
+        {
+          "feature_id": "municipio.5239",
+          "gid": 5239,
+          "name": "Isla Las Lechiguanas",
+          "in1": "309302",
+          "source_in1": "",
+          "cod_prov": "30",
+          "source": "Georef API v2.0 gobiernos-locales",
+          "reason": "Exact name match and IGN centroid falls inside Georef polygon 309302."
+        },
+        {
+          "feature_id": "municipio.5461",
+          "gid": 5461,
+          "name": "Salto Encantado",
+          "in1": "540053",
+          "source_in1": "",
+          "cod_prov": "54",
+          "source": "Georef API v2.0 gobiernos-locales",
+          "reason": "Exact name match and IGN centroid falls inside Georef polygon 540053."
+        },
+        {
+          "feature_id": "municipio.6094",
+          "gid": 6094,
+          "name": "Hardy",
+          "in1": "822808",
+          "source_in1": "822784",
+          "cod_prov": "82",
+          "source": "Georef API v2.0 gobiernos-locales",
+          "reason": "Exact name match and IGN centroid falls inside Georef polygon 822808; corrects source duplicate 822784."
+        },
+        {
+          "feature_id": "municipio.6130",
+          "gid": 6130,
+          "name": "Colonia Teresa",
+          "in1": "823704",
+          "source_in1": "",
+          "cod_prov": "82",
+          "source": "Georef API v2.0 gobiernos-locales",
+          "reason": "Exact name match and IGN centroid falls inside Georef polygon 823704."
+        },
+        {
+          "feature_id": "municipio.6178",
+          "gid": 6178,
+          "name": "Manuel Derqui",
+          "in1": "180081",
+          "source_in1": "",
+          "cod_prov": "18",
+          "source": "Georef API v2.0 gobiernos-locales",
+          "reason": "Exact name match and IGN centroid falls inside Georef polygon 180081."
+        }
+      ],
+      "unmatched_feature_ids": [],
+      "source_path": "data\\municipality_in1_overrides.json"
     }
-  }
+  ],
+  "exclusions": [
+    {
+      "source": "municipality_feature_exclusions",
+      "feature_count": 4,
+      "features": [
+        {
+          "feature_id": "municipio.5271",
+          "gid": 5271,
+          "name": "G\u00fcer Aike",
+          "source": "Manual review against Georef API v2.0 gobiernos-locales",
+          "reason": "Accepted unresolved source row: no Georef local-government name match; likely not a municipality polygon. Excluded so it does not block map production.",
+          "checked_at": "2026-08-09"
+        },
+        {
+          "feature_id": "municipio.6169",
+          "gid": 6169,
+          "name": "Malvinas",
+          "source": "Manual review against Georef API v2.0 gobiernos-locales",
+          "reason": "Accepted unresolved source row: no exact Georef name match; centroid falls inside Esquina, Corrientes, so do not map to Malvinas Argentinas. Excluded so it does not block map production.",
+          "checked_at": "2026-08-09"
+        },
+        {
+          "feature_id": "municipio.6201",
+          "gid": 6201,
+          "name": "El Caim\u00e1n",
+          "source": "Manual review against Georef API v2.0 gobiernos-locales",
+          "reason": "Accepted unresolved source row: no exact Georef name match; centroid falls inside San Miguel, Corrientes. Excluded so it does not block map production.",
+          "checked_at": "2026-08-09"
+        },
+        {
+          "feature_id": "municipio.5702",
+          "gid": 5702,
+          "name": "Colonia Cerrito",
+          "source": "Manual review against Georef API v2.0 gobiernos-locales",
+          "reason": "Accepted unresolved source row: no exact Georef name match; centroid falls inside Arroyo Corralito, Entre Rios. Excluded so it does not block map production.",
+          "checked_at": "2026-08-09"
+        }
+      ],
+      "unmatched_feature_ids": [],
+      "source_path": "data\\municipality_feature_exclusions.json"
+    }
+  ],
+  "duplicate_resolutions": [
+    {
+      "source": "municipality_duplicate_resolutions",
+      "resolution_count": 1,
+      "removed_feature_count": 1,
+      "resolutions": [
+        {
+          "resolution": "220476",
+          "policy": "merge_features",
+          "kept_feature_id": "municipio.5240",
+          "removed_feature_ids": [
+            "municipio.5248"
+          ],
+          "merged_feature_ids": [
+            "municipio.5240",
+            "municipio.5248"
+          ],
+          "in1": "220476",
+          "name": "Machagai",
+          "source": "Georef API v2.0 gobiernos-locales",
+          "reason": "Both IGN features are named Machagai, share in1 220476, and their centroids fall inside Georef polygon 220476. Preserve both geometry parts as one MultiPolygon instead of dropping territory."
+        }
+      ],
+      "unmatched_resolutions": [],
+      "partial_resolutions": [],
+      "source_path": "data\\municipality_duplicate_resolutions.json"
+    }
+  ]
 }

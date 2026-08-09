@@ -1,0 +1,44 @@
+{
+  "municipio.5239": {
+    "in1": "309302",
+    "expected_gid": 5239,
+    "expected_name": "Isla Las Lechiguanas",
+    "source": "Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Exact name match and IGN centroid falls inside Georef polygon 309302."
+  },
+  "municipio.5461": {
+    "in1": "540053",
+    "expected_gid": 5461,
+    "expected_name": "Salto Encantado",
+    "source": "Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Exact name match and IGN centroid falls inside Georef polygon 540053."
+  },
+  "municipio.6130": {
+    "in1": "823704",
+    "expected_gid": 6130,
+    "expected_name": "Colonia Teresa",
+    "source": "Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Exact name match and IGN centroid falls inside Georef polygon 823704."
+  },
+  "municipio.6094": {
+    "in1": "822808",
+    "expected_source_in1": "822784",
+    "allow_source_in1_correction": true,
+    "expected_gid": 6094,
+    "expected_name": "Hardy",
+    "source": "Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Exact name match and IGN centroid falls inside Georef polygon 822808; corrects source duplicate 822784."
+  },
+  "municipio.6178": {
+    "in1": "180081",
+    "expected_gid": 6178,
+    "expected_name": "Manuel Derqui",
+    "source": "Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Exact name match and IGN centroid falls inside Georef polygon 180081."
+  }
+}

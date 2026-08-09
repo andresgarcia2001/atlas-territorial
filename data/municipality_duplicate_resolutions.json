@@ -1,0 +1,18 @@
+{
+  "220476": {
+    "policy": "merge_features",
+    "in1": "220476",
+    "feature_ids": [
+      "municipio.5240",
+      "municipio.5248"
+    ],
+    "expected_gids": {
+      "municipio.5240": 5240,
+      "municipio.5248": 5248
+    },
+    "expected_name": "Machagai",
+    "source": "Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Both IGN features are named Machagai, share in1 220476, and their centroids fall inside Georef polygon 220476. Preserve both geometry parts as one MultiPolygon instead of dropping territory."
+  }
+}

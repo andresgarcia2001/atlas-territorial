@@ -1,0 +1,30 @@
+{
+  "municipio.5271": {
+    "expected_gid": 5271,
+    "expected_name": "G\u00fcer Aike",
+    "source": "Manual review against Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Accepted unresolved source row: no Georef local-government name match; likely not a municipality polygon. Excluded so it does not block map production."
+  },
+  "municipio.6169": {
+    "expected_gid": 6169,
+    "expected_name": "Malvinas",
+    "source": "Manual review against Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Accepted unresolved source row: no exact Georef name match; centroid falls inside Esquina, Corrientes, so do not map to Malvinas Argentinas. Excluded so it does not block map production."
+  },
+  "municipio.6201": {
+    "expected_gid": 6201,
+    "expected_name": "El Caim\u00e1n",
+    "source": "Manual review against Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Accepted unresolved source row: no exact Georef name match; centroid falls inside San Miguel, Corrientes. Excluded so it does not block map production."
+  },
+  "municipio.5702": {
+    "expected_gid": 5702,
+    "expected_name": "Colonia Cerrito",
+    "source": "Manual review against Georef API v2.0 gobiernos-locales",
+    "checked_at": "2026-08-09",
+    "reason": "Accepted unresolved source row: no exact Georef name match; centroid falls inside Arroyo Corralito, Entre Rios. Excluded so it does not block map production."
+  }
+}

@@ -16,6 +16,18 @@ IGN_MUNICIPALITIES_URL = (
 
 GEOREF_LOCAL_GOVERNMENTS_URL = "https://apis.datos.gob.ar/georef/api/v2.0/gobiernos-locales.geojson"
 GEOREF_SOURCE_NAME = "Georef API v2.0 gobiernos-locales"
+DEFAULT_IN1_OVERRIDE_PATHS = (
+    "data/municipality_in1_overrides.json",
+    "/data/municipality_in1_overrides.json",
+)
+DEFAULT_FEATURE_EXCLUSION_PATHS = (
+    "data/municipality_feature_exclusions.json",
+    "/data/municipality_feature_exclusions.json",
+)
+DEFAULT_DUPLICATE_RESOLUTION_PATHS = (
+    "data/municipality_duplicate_resolutions.json",
+    "/data/municipality_duplicate_resolutions.json",
+)
 
 EXPECTED_PROVINCE_CODES = {
     "02",
@@ -61,6 +73,10 @@ def add_query_param(url, name, value):
 def read_geojson(path):
     with Path(path).open(encoding="utf-8") as file:
         return json.load(file)
+
+
+def read_json(path):
+    return read_geojson(path)
 
 
 def download_geojson(url, max_features=None):
@@ -125,6 +141,294 @@ def get_features(data):
         raise ValueError("El GeoJSON no contiene una lista valida de features.")
 
     return features
+
+
+def read_first_existing_json(paths):
+    for path in paths:
+        json_path = Path(path)
+
+        if json_path.is_file():
+            return read_json(json_path), str(json_path)
+
+    return None, None
+
+
+def read_default_in1_overrides():
+    return read_first_existing_json(DEFAULT_IN1_OVERRIDE_PATHS)
+
+
+def read_default_feature_exclusions():
+    return read_first_existing_json(DEFAULT_FEATURE_EXCLUSION_PATHS)
+
+
+def read_default_duplicate_resolutions():
+    return read_first_existing_json(DEFAULT_DUPLICATE_RESOLUTION_PATHS)
+
+
+def validate_expected_feature(feature, rule, rule_type):
+    feature_id = feature.get("id")
+    expected_gid = rule.get("expected_gid")
+    if expected_gid is not None and feature_gid(feature) != expected_gid:
+        raise ValueError(
+            f"Stale {rule_type} for {feature_id}: expected gid {expected_gid}, got {feature_gid(feature)}."
+        )
+
+    expected_name = as_text(rule.get("expected_name"))
+    if expected_name and feature_label(feature) != expected_name:
+        raise ValueError(
+            f"Stale {rule_type} for {feature_id}: expected name {expected_name!r}, "
+            f"got {feature_label(feature)!r}."
+        )
+
+
+def validate_override_entry(feature, override):
+    in1 = as_text(override.get("in1"))
+
+    if not MUNICIPALITY_CODE_PATTERN.fullmatch(in1):
+        raise ValueError(f"Invalid in1 override for {feature.get('id')}: {in1!r}.")
+
+    validate_expected_feature(feature, override, "in1 override")
+
+    return in1
+
+
+def apply_in1_overrides(data, overrides):
+    if not overrides:
+        return deepcopy(data), None
+
+    normalized_data = deepcopy(data)
+    applied = []
+    unmatched = set(overrides)
+
+    for feature in get_features(normalized_data):
+        feature_id = feature.get("id")
+
+        if feature_id not in overrides:
+            continue
+
+        override = overrides[feature_id]
+        unmatched.discard(feature_id)
+        in1 = validate_override_entry(feature, override)
+        properties = dict(feature.get("properties") or {})
+        current_in1 = as_text(properties.get("in1"))
+        expected_source_in1 = as_text(override.get("expected_source_in1"))
+        allow_source_in1_correction = override.get("allow_source_in1_correction") is True
+
+        if current_in1 and current_in1 != in1:
+            if not allow_source_in1_correction:
+                raise ValueError(
+                    f"Conflicting in1 override for {feature_id}: source has {current_in1!r}, override has {in1!r}."
+                )
+
+            if not expected_source_in1 or current_in1 != expected_source_in1:
+                raise ValueError(
+                    f"Stale source in1 correction for {feature_id}: "
+                    f"expected source {expected_source_in1!r}, got {current_in1!r}."
+                )
+
+        cod_prov = in1[:2]
+        properties.update(
+            {
+                "in1": in1,
+                "cod_prov": cod_prov,
+                "in1_override_source": as_text(override.get("source")),
+                "in1_override_reason": as_text(override.get("reason")),
+                "in1_override_checked_at": as_text(override.get("checked_at")),
+            }
+        )
+        feature["properties"] = properties
+        applied.append(
+            {
+                "feature_id": feature_id,
+                "gid": feature_gid(feature),
+                "name": feature_label(feature),
+                "in1": in1,
+                "source_in1": current_in1,
+                "cod_prov": cod_prov,
+                "source": as_text(override.get("source")),
+                "reason": as_text(override.get("reason")),
+            }
+        )
+
+    return normalized_data, {
+        "source": "municipality_in1_overrides",
+        "feature_count": len(applied),
+        "features": applied,
+        "unmatched_feature_ids": sorted(unmatched),
+    }
+
+
+def apply_feature_exclusions(data, exclusions):
+    if not exclusions:
+        return deepcopy(data), None
+
+    normalized_data = deepcopy(data)
+    kept_features = []
+    excluded_features = []
+    unmatched = set(exclusions)
+
+    for feature in get_features(normalized_data):
+        feature_id = feature.get("id")
+
+        if feature_id not in exclusions:
+            kept_features.append(feature)
+            continue
+
+        exclusion = exclusions[feature_id]
+        unmatched.discard(feature_id)
+        validate_expected_feature(feature, exclusion, "feature exclusion")
+        excluded_features.append(
+            {
+                "feature_id": feature_id,
+                "gid": feature_gid(feature),
+                "name": feature_label(feature),
+                "source": as_text(exclusion.get("source")),
+                "reason": as_text(exclusion.get("reason")),
+                "checked_at": as_text(exclusion.get("checked_at")),
+            }
+        )
+
+    normalized_data["features"] = kept_features
+
+    return normalized_data, {
+        "source": "municipality_feature_exclusions",
+        "feature_count": len(excluded_features),
+        "features": excluded_features,
+        "unmatched_feature_ids": sorted(unmatched),
+    }
+
+
+def geometry_to_polygon_parts(geometry):
+    geometry_type = (geometry or {}).get("type")
+    coordinates = (geometry or {}).get("coordinates")
+
+    if geometry_type == "Polygon":
+        return [deepcopy(coordinates)]
+
+    if geometry_type == "MultiPolygon":
+        return deepcopy(coordinates)
+
+    raise ValueError(f"Cannot merge non-polygon geometry type {geometry_type!r}.")
+
+
+def feature_ids_for_resolution(resolution_key, resolution):
+    feature_ids = resolution.get("feature_ids")
+
+    if not isinstance(feature_ids, list) or not feature_ids or not all(as_text(item) for item in feature_ids):
+        raise ValueError(f"Duplicate resolution {resolution_key!r} must include non-empty feature_ids.")
+
+    return [as_text(item) for item in feature_ids]
+
+
+def apply_duplicate_resolutions(data, resolutions):
+    if not resolutions:
+        return deepcopy(data), None
+
+    normalized_data = deepcopy(data)
+    features = get_features(normalized_data)
+    feature_by_id = {feature.get("id"): feature for feature in features}
+    remove_feature_ids = set()
+    applied = []
+    unmatched = []
+    partial = []
+
+    for resolution_key, resolution in resolutions.items():
+        policy = as_text(resolution.get("policy"))
+
+        if policy != "merge_features":
+            raise ValueError(f"Unsupported duplicate resolution policy for {resolution_key!r}: {policy!r}.")
+
+        feature_ids = feature_ids_for_resolution(resolution_key, resolution)
+        present_feature_ids = [feature_id for feature_id in feature_ids if feature_id in feature_by_id]
+
+        if not present_feature_ids:
+            unmatched.append(resolution_key)
+            continue
+
+        if len(present_feature_ids) != len(feature_ids):
+            partial.append(
+                {
+                    "resolution": resolution_key,
+                    "present_feature_ids": present_feature_ids,
+                    "missing_feature_ids": [feature_id for feature_id in feature_ids if feature_id not in feature_by_id],
+                }
+            )
+            continue
+
+        expected_in1 = as_text(resolution.get("in1")) or as_text(resolution_key)
+
+        if not MUNICIPALITY_CODE_PATTERN.fullmatch(expected_in1):
+            raise ValueError(f"Invalid duplicate resolution in1 for {resolution_key!r}: {expected_in1!r}.")
+
+        if any(feature_id in remove_feature_ids for feature_id in feature_ids):
+            raise ValueError(f"Duplicate resolution {resolution_key!r} overlaps a previous resolution.")
+
+        merge_features = [feature_by_id[feature_id] for feature_id in feature_ids]
+        expected_gids = resolution.get("expected_gids") or {}
+
+        for feature in merge_features:
+            validate_expected_feature(feature, resolution, "duplicate resolution")
+
+            if isinstance(expected_gids, dict) and feature.get("id") in expected_gids:
+                expected_gid = expected_gids[feature.get("id")]
+                if feature_gid(feature) != expected_gid:
+                    raise ValueError(
+                        f"Stale duplicate resolution for {feature.get('id')}: "
+                        f"expected gid {expected_gid}, got {feature_gid(feature)}."
+                    )
+
+            current_in1 = as_text((feature.get("properties") or {}).get("in1"))
+            if current_in1 != expected_in1:
+                raise ValueError(
+                    f"Duplicate resolution {resolution_key!r} expected in1 {expected_in1!r} "
+                    f"for {feature.get('id')}, got {current_in1!r}."
+                )
+
+        polygon_parts = []
+        for feature in merge_features:
+            polygon_parts.extend(geometry_to_polygon_parts(feature.get("geometry")))
+
+        base_feature = merge_features[0]
+        base_feature["geometry"] = {
+            "type": "MultiPolygon",
+            "coordinates": polygon_parts,
+        }
+        base_properties = dict(base_feature.get("properties") or {})
+        base_properties.update(
+            {
+                "duplicate_resolution_policy": policy,
+                "duplicate_resolution_source": as_text(resolution.get("source")),
+                "duplicate_resolution_reason": as_text(resolution.get("reason")),
+                "duplicate_resolution_checked_at": as_text(resolution.get("checked_at")),
+                "duplicate_resolution_merged_feature_ids": feature_ids,
+            }
+        )
+        base_feature["properties"] = base_properties
+        remove_feature_ids.update(feature_ids[1:])
+        applied.append(
+            {
+                "resolution": resolution_key,
+                "policy": policy,
+                "kept_feature_id": base_feature.get("id"),
+                "removed_feature_ids": feature_ids[1:],
+                "merged_feature_ids": feature_ids,
+                "in1": expected_in1,
+                "name": feature_label(base_feature),
+                "source": as_text(resolution.get("source")),
+                "reason": as_text(resolution.get("reason")),
+            }
+        )
+
+    normalized_data["features"] = [feature for feature in features if feature.get("id") not in remove_feature_ids]
+
+    return normalized_data, {
+        "source": "municipality_duplicate_resolutions",
+        "resolution_count": len(applied),
+        "removed_feature_count": len(remove_feature_ids),
+        "resolutions": applied,
+        "unmatched_resolutions": sorted(unmatched),
+        "partial_resolutions": partial,
+    }
 
 
 def georef_province_id(properties):
@@ -409,6 +713,9 @@ def prepare(
     georef_supplement_input_path=None,
     georef_supplement_url=GEOREF_LOCAL_GOVERNMENTS_URL,
     georef_supplement_province_codes=None,
+    in1_overrides_path=None,
+    feature_exclusions_path=None,
+    duplicate_resolutions_path=None,
 ):
     if input_path:
         data = read_geojson(input_path)
@@ -419,6 +726,19 @@ def prepare(
 
         if raw_output_path:
             write_json(raw_output_path, data)
+
+    override_reports = []
+
+    if in1_overrides_path:
+        overrides = read_json(in1_overrides_path)
+        overrides_source = str(in1_overrides_path)
+    else:
+        overrides, overrides_source = read_default_in1_overrides()
+
+    if overrides:
+        data, override_report = apply_in1_overrides(data, overrides)
+        override_report["source_path"] = overrides_source
+        override_reports.append(override_report)
 
     supplement_reports = []
 
@@ -438,10 +758,45 @@ def prepare(
         )
         supplement_reports.append(supplement_report)
 
+    exclusion_reports = []
+
+    if feature_exclusions_path:
+        exclusions = read_json(feature_exclusions_path)
+        exclusions_source = str(feature_exclusions_path)
+    else:
+        exclusions, exclusions_source = read_default_feature_exclusions()
+
+    if exclusions:
+        data, exclusion_report = apply_feature_exclusions(data, exclusions)
+        exclusion_report["source_path"] = exclusions_source
+        exclusion_reports.append(exclusion_report)
+
+    duplicate_resolution_reports = []
+
+    if duplicate_resolutions_path:
+        duplicate_resolutions = read_json(duplicate_resolutions_path)
+        duplicate_resolutions_source = str(duplicate_resolutions_path)
+    else:
+        duplicate_resolutions, duplicate_resolutions_source = read_default_duplicate_resolutions()
+
+    if duplicate_resolutions:
+        data, duplicate_resolution_report = apply_duplicate_resolutions(data, duplicate_resolutions)
+        duplicate_resolution_report["source_path"] = duplicate_resolutions_source
+        duplicate_resolution_reports.append(duplicate_resolution_report)
+
     normalized_data, report = validate_and_normalize(data, source_url=source_url)
 
     if supplement_reports:
         report["supplements"] = supplement_reports
+
+    if override_reports:
+        report["overrides"] = override_reports
+
+    if exclusion_reports:
+        report["exclusions"] = exclusion_reports
+
+    if duplicate_resolution_reports:
+        report["duplicate_resolutions"] = duplicate_resolution_reports
 
     if report["has_blockers"]:
         if write_valid_only:
@@ -510,6 +865,18 @@ def parse_args():
         default=GEOREF_LOCAL_GOVERNMENTS_URL,
         help="Georef gobiernos-locales GeoJSON URL used for supplements.",
     )
+    parser.add_argument(
+        "--in1-overrides",
+        help="Optional JSON file with explicit source feature id to in1 overrides.",
+    )
+    parser.add_argument(
+        "--feature-exclusions",
+        help="Optional JSON file with accepted source feature exclusions.",
+    )
+    parser.add_argument(
+        "--duplicate-resolutions",
+        help="Optional JSON file with documented duplicate municipality resolutions.",
+    )
     return parser.parse_args()
 
 
@@ -531,6 +898,9 @@ def main():
         georef_supplement_input_path=args.georef_supplement_input,
         georef_supplement_url=args.georef_supplement_url,
         georef_supplement_province_codes=georef_supplement_province_codes,
+        in1_overrides_path=args.in1_overrides,
+        feature_exclusions_path=args.feature_exclusions,
+        duplicate_resolutions_path=args.duplicate_resolutions,
     )
 
 
