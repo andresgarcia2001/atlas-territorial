@@ -1,6 +1,6 @@
 # Data sources and territorial identifiers
 
-Last reviewed: 2026-08-08.
+Last reviewed: 2026-08-09.
 
 This project keeps source GeoJSON files under `data/`, but database identifiers
 must be stable across source refreshes. Do not use source row order or `gid` as a
@@ -11,6 +11,13 @@ canonical territorial id when a national code is available.
 ### `poblacion_provincias_indec_2022.geojson`
 
 - Level loaded as: `province`.
+- Source context: local seed file associated with the IGN Capas SIG layer
+  `Poblacion por provincia CNPHyV 2022 (provisorio)`.
+- Source links:
+  - IGN Capas SIG:
+    `https://www.ign.gob.ar/NuestrasActividades/InformacionGeoespacial/CapasSIG`
+  - INDEC Censo 2022 composition/distribution tables:
+    `https://www.indec.gob.ar/indec/web/Nivel4-Tema-2-18-77`
 - Current inspected fields: `gid`, `fna`, `gna`, `nam`, `tpvpsc`, `mftvp`,
   `vmtvp`, `oxtvp`, `categoria`.
 - Indicators loaded from this file:
@@ -21,8 +28,10 @@ canonical territorial id when a national code is available.
 - Important caveat: this file does not expose the two-digit province code in
   the inspected properties. The current `gid` values are source row ids and must
   not be used as canonical province ids for child datasets.
-- Source/date provenance for the original download still needs to be recovered
-  if it is not available in the project history.
+- Important caveat: the local GeoJSON preserves WFS-style metadata
+  (`numberMatched`, `numberReturned`, `timeStamp`) but not the original direct
+  download URL. Treat the file as an included seed dataset and cite both the IGN
+  layer catalog and the INDEC Censo 2022 statistical source.
 
 ## IGN municipality layer inspection
 

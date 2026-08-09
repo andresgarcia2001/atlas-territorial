@@ -36,6 +36,47 @@ un municipio o un radio censal. Cada territorio guarda:
 - `metadata`: propiedades originales del GeoJSON.
 - `geom`: geometria PostGIS.
 
+## Fuentes de datos y trazabilidad
+
+Este proyecto busca que el origen y el tratamiento de los datos sean auditables
+por usuarios tecnicos y no tecnicos. Los archivos cargados en la base conservan
+las propiedades originales del GeoJSON en `metadata`; los identificadores
+internos se normalizan para evitar depender del orden de filas o de ids
+temporales de cada servicio.
+
+Fuentes usadas actualmente:
+
+| Dataset usado | Archivo/capa en el proyecto | Uso | Fuente institucional y link |
+| --- | --- | --- | --- |
+| Provincias con poblacion del Censo 2022 | `data/poblacion_provincias_indec_2022.geojson` | Geometria provincial e indicadores `poblacion_total`, `mujeres`, `varones` y `otro_x`. | Capa publicada por IGN en [Capas SIG](https://www.ign.gob.ar/NuestrasActividades/InformacionGeoespacial/CapasSIG) como `Poblacion por provincia CNPHyV 2022 (provisorio)`, con datos censales del [INDEC - Censo 2022](https://www.indec.gob.ar/indec/web/Nivel4-Tema-2-18-77). |
+| Municipios, comunas, juntas y gobiernos locales disponibles en IGN | WFS `ign:municipio`, normalizado en `data/municipios_ign.geojson` | Poligonos municipales/locales para el mapa. | [IGN WFS GetCapabilities](https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetCapabilities) y descarga GeoJSON con `typeName=ign:municipio`: [GetFeature](https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetFeature&typeName=ign:municipio&outputFormat=application/json&srsName=EPSG:4326). |
+| Gobiernos locales de Santiago del Estero y validacion externa de codigos | `gobiernos-locales.geojson` de Georef | Suplemento de poligonos faltantes para Santiago del Estero y verificacion de casos con `in1` faltante o duplicado. | [Georef - descarga de base completa](https://www.argentina.gob.ar/georef/descarga-de-la-base-completa) y endpoint usado: [gobiernos-locales.geojson](https://apis.datos.gob.ar/georef/api/v2.0/gobiernos-locales.geojson). |
+| Codigos geograficos de referencia | No se carga como dataset independiente | Referencia conceptual para interpretar codigos territoriales nacionales. | [INDEC - Codigos geograficos del Censo 2022](https://redatam.indec.gob.ar/redarg/CENSOS/CPV2022/Docs/codcart.htm). |
+
+Tratamientos y fusiones aplicadas:
+
+- El archivo provincial ya llega como una capa tematica: combina geometria
+  territorial publicada por IGN con atributos censales del CNPHyV 2022. El
+  proyecto no vuelve a fusionar esos datos; solo carga los campos incluidos.
+- El mapa municipal se arma principalmente con `ign:municipio`. Como esa capa no
+  trae poligonos validos para Santiago del Estero, se agregan 165 gobiernos
+  locales desde Georef para la provincia `86`.
+- Georef tambien se usa como fuente de contraste para correcciones puntuales:
+  cuatro `in1` faltantes fueron completados por coincidencia de nombre y
+  contencion espacial; `Hardy` se recodifico de `822784` a `822808`.
+- Los dos poligonos IGN de `Machagai` comparten el mismo `in1 = 220476`; se
+  fusionaron en un unico `MultiPolygon` para preservar ambas partes de la
+  geometria y evitar duplicados.
+- Cuatro filas sin identificador confiable (`Guer Aike`, `Malvinas`, `El
+  Caiman`, `Colonia Cerrito`) quedaron excluidas por ahora. No bloquean la
+  produccion del mapa y pueden agregarse mas adelante si se confirma su estatus
+  administrativo.
+- Los radios censales no se cargan todavia. `CENSUS_RADII_GEOJSON` es un insumo
+  opcional futuro.
+
+Para auditar estos criterios, revisar `data/README.md`,
+`data/municipios_ign_validation_report.json` y los JSON de reglas en `data/`.
+
 ## Configuracion local
 
 El proyecto trae valores por defecto para desarrollo. Para personalizarlos:
