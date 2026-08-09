@@ -73,6 +73,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      # The backend applies Alembic migrations on startup; the loader waits for it
+      # so the database schema exists before loading territorial data.
       backend:
         condition: service_healthy
     

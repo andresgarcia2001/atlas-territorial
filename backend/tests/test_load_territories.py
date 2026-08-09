@@ -228,6 +228,70 @@ def test_load_dataset_rejects_invalid_municipality_in1(monkeypatch, tmp_path):
         load_territories.load_dataset(object(), config, set())
 
 
+def test_load_dataset_rejects_feature_without_name_value(monkeypatch, tmp_path):
+    geojson_path = write_geojson(
+        tmp_path,
+        [
+            polygon_feature({"in1": "060735", "nam": "San Antonio de Areco"}),
+            polygon_feature({"in1": "060742"}),
+        ],
+    )
+    config = load_territories.DatasetConfig(
+        name="ign_municipalities_test",
+        level="municipality",
+        source="IGN WFS ign:municipio",
+        path_env="TEST_IGN_MUNICIPALITIES_GEOJSON",
+        default_path=str(geojson_path),
+        id_prefix="municipio",
+        id_property_env="TEST_IGN_MUNICIPALITY_ID_PROPERTY",
+        id_property_candidates=("in1",),
+        name_property_env="TEST_IGN_MUNICIPALITY_NAME_PROPERTY",
+        name_property_candidates=("nam",),
+        id_must_match_pattern=r"^\d{6}$",
+        require_unique_external_id=True,
+        parent_id_prefix="provincia",
+        derive_parent_from_external_id_prefix_length=2,
+        require_parent_id=True,
+    )
+
+    monkeypatch.delenv("TEST_IGN_MUNICIPALITIES_GEOJSON", raising=False)
+
+    with pytest.raises(SystemExit, match="No se pudo resolver el nombre"):
+        load_territories.load_dataset(object(), config, {"provincia_06"})
+
+
+def test_load_dataset_reads_source_from_environment_at_runtime(monkeypatch, tmp_path):
+    geojson_path = write_geojson(tmp_path, [polygon_feature({"id": "060735001", "nam": "Radio 001"})])
+    config = load_territories.DatasetConfig(
+        name="census_radii_test",
+        level="census_radius",
+        source="default source",
+        path_env="TEST_CENSUS_RADII_GEOJSON",
+        default_path=str(geojson_path),
+        id_prefix="radio_censal",
+        id_property_env="TEST_CENSUS_RADIUS_ID_PROPERTY",
+        id_property_candidates=("id",),
+        name_property_env="TEST_CENSUS_RADIUS_NAME_PROPERTY",
+        name_property_candidates=("nam",),
+        id_must_match_pattern=r"^\d+$",
+        require_unique_external_id=True,
+        source_env="TEST_CENSUS_RADII_SOURCE",
+    )
+    upserted_sources = []
+
+    def fake_upsert_territory(cur, config, territory_id, name, external_id, parent_id, properties, geometry):
+        upserted_sources.append(config.source)
+
+    monkeypatch.delenv("TEST_CENSUS_RADII_GEOJSON", raising=False)
+    monkeypatch.setenv("TEST_CENSUS_RADII_SOURCE", "runtime source")
+    monkeypatch.setattr(load_territories, "upsert_territory", fake_upsert_territory)
+
+    loaded_count = load_territories.load_dataset(object(), config, set())
+
+    assert loaded_count == 1
+    assert upserted_sources == ["runtime source"]
+
+
 def test_load_dataset_rejects_duplicate_municipality_in1(monkeypatch, tmp_path):
     geojson_path = write_geojson(
         tmp_path,
@@ -312,7 +376,7 @@ def test_refresh_map_data_materialized_view_executes_refresh():
 
     load_territories.refresh_map_data_materialized_view(cur)
 
-    assert cur.queries == ["REFRESH MATERIALIZED VIEW territory_indicator_map_data_mv;"]
+    assert cur.queries == ["REFRESH MATERIALIZED VIEW CONCURRENTLY territory_indicator_map_data_mv;"]
 
 
 def test_main_refreshes_map_data_materialized_view_after_loading(monkeypatch):

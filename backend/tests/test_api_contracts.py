@@ -1,4 +1,8 @@
 import main as api_main
+from fastapi.testclient import TestClient
+
+
+client = TestClient(api_main.app)
 
 
 def test_map_data_returns_geojson_feature_collection_contract(monkeypatch):
@@ -31,16 +35,21 @@ def test_map_data_returns_geojson_feature_collection_contract(monkeypatch):
             )
         ]
 
+    monkeypatch.setattr(api_main, "fetch_indicator_names", lambda level, year: [("poblacion_total",)])
     monkeypatch.setattr(api_main, "fetch_map_data", fake_fetch_map_data)
 
-    response = api_main.get_map_data(
-        indicator="poblacion_total",
-        year=2022,
-        level="province",
-        territory_ids=["provincia_02"],
-        province_ids=["provincia_legacy"],
+    response = client.get(
+        "/map-data",
+        params=[
+            ("indicator", "poblacion_total"),
+            ("year", "2022"),
+            ("level", "province"),
+            ("territory_ids", "provincia_02"),
+            ("province_ids", "provincia_legacy"),
+        ],
     )
 
+    assert response.status_code == 200
     assert captured_args == {
         "indicator": "poblacion_total",
         "year": 2022,
@@ -48,8 +57,8 @@ def test_map_data_returns_geojson_feature_collection_contract(monkeypatch):
         "territory_ids": ["provincia_02"],
         "parent_id": None,
     }
-    assert response["type"] == "FeatureCollection"
-    assert response["features"] == [
+    assert response.json()["type"] == "FeatureCollection"
+    assert response.json()["features"] == [
         {
             "type": "Feature",
             "properties": {
@@ -66,3 +75,20 @@ def test_map_data_returns_geojson_feature_collection_contract(monkeypatch):
             "geometry": geometry,
         }
     ]
+
+
+def test_map_data_rejects_unknown_level():
+    response = client.get("/map-data", params={"level": "district"})
+
+    assert response.status_code == 422
+
+
+def test_map_data_rejects_unknown_indicator(monkeypatch):
+    monkeypatch.setattr(api_main, "fetch_indicator_names", lambda level, year: [("poblacion_total",)])
+
+    response = client.get(
+        "/map-data",
+        params={"indicator": "desempleo", "year": "2022", "level": "province"},
+    )
+
+    assert response.status_code == 422

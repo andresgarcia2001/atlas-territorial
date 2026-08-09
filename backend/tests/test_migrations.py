@@ -103,9 +103,9 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
                 )
                 assert {
                     "territory_indicator_map_data_mv_key_idx",
-                    "territory_indicator_map_data_mv_filter_idx",
+                    "territory_indicator_map_data_mv_id_idx",
+                    "territory_indicator_map_data_mv_level_idx",
                     "territory_indicator_map_data_mv_parent_idx",
-                    "territory_indicator_map_data_mv_id_indicator_year_idx",
                 } <= {row[0] for row in cur.fetchall()}
 
                 cur.execute(

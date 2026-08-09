@@ -166,20 +166,22 @@ municipios huerfanos.
 
 ## Materialized View de mapa
 
-`/map-data` lee desde `territory_indicator_map_data_mv`, una Materialized View que
-precalcula el GeoJSON y los valores por territorio, indicador y anio. Esto evita
-repetir el join y `ST_AsGeoJSON` en cada request del mapa.
+`/map-data` lee geometria desde `territory_indicator_map_data_mv`, una Materialized
+View con una fila por territorio. Esto evita repetir `ST_AsGeoJSON` en cada request
+del mapa sin duplicar la geometria por cada indicador. Los valores se resuelven con
+un `LEFT JOIN` contra `indicators`, la misma semantica que usa `/indicator-values`.
 
 La vista puede quedar desactualizada si se insertan o actualizan territorios o
 indicadores manualmente. El loader ejecuta:
 
 ```sql
-REFRESH MATERIALIZED VIEW territory_indicator_map_data_mv;
+REFRESH MATERIALIZED VIEW CONCURRENTLY territory_indicator_map_data_mv;
 ```
 
-como ultimo paso de la carga, despues de insertar territorios e indicadores. Si se
-modifican datos fuera del loader, ejecutar ese refresh manualmente antes de comparar
-resultados en la API.
+como ultimo paso de la carga, despues de insertar territorios e indicadores. La MV
+tiene un indice unico para permitir el refresh concurrente. Si se modifican datos
+fuera del loader, ejecutar ese refresh manualmente antes de comparar resultados en
+la API.
 
 ## API territorial
 

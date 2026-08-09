@@ -40,6 +40,7 @@ export type MapProperties = {
   indicator: string;
   value: number | null;
   year: number;
+  territory_color?: string;
 };
 
 export type MapFeature = {

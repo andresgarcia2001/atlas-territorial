@@ -14,7 +14,7 @@ export const DEFAULT_INDICATOR = "poblacion_total";
 export const INDICATOR_GROUPS: IndicatorGroup[] = [
   {
     id: "population",
-    label: "Poblacion",
+    label: "Población",
     indicators: [
       { id: "poblacion_total", label: "Total" },
       { id: "mujeres", label: "Mujeres" },

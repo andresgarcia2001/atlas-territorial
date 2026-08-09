@@ -1,6 +1,7 @@
 import os
+from typing import Literal
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from repositories import (
@@ -12,6 +13,8 @@ from repositories import (
     fetch_territories_with_geometry,
     fetch_territory_options,
 )
+
+TerritoryLevelId = Literal["province", "municipality", "census_radius"]
 
 app = FastAPI(title="Territorio Argentino API")
 
@@ -53,7 +56,7 @@ def list_territory_levels():
 
 @app.get("/territories")
 def list_territories(
-    level: str = DEFAULT_TERRITORY_LEVEL,
+    level: TerritoryLevelId = DEFAULT_TERRITORY_LEVEL,
     parent_id: str | None = None,
     territory_ids: list[str] | None = Query(default=None),
 ):
@@ -80,7 +83,7 @@ def list_territories(
 
 
 @app.get("/territory-options")
-def list_territory_options(level: str = DEFAULT_TERRITORY_LEVEL, parent_id: str | None = None):
+def list_territory_options(level: TerritoryLevelId = DEFAULT_TERRITORY_LEVEL, parent_id: str | None = None):
     rows = fetch_territory_options(level, parent_id)
 
     return {
@@ -97,7 +100,7 @@ def list_territory_options(level: str = DEFAULT_TERRITORY_LEVEL, parent_id: str 
 
 
 @app.get("/indicators")
-def list_indicators(level: str | None = None, year: int | None = None):
+def list_indicators(level: TerritoryLevelId | None = None, year: int | None = None):
     rows = fetch_indicator_names(level, year)
 
     return {"indicators": [row[0] for row in rows]}
@@ -107,15 +110,26 @@ def get_selected_territory_ids(territory_ids, province_ids):
     return territory_ids if territory_ids is not None else province_ids
 
 
+def validate_indicator(indicator: str, level: TerritoryLevelId, year: int):
+    available_indicators = {row[0] for row in fetch_indicator_names(level, year)}
+
+    if indicator not in available_indicators:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Indicador no disponible para level={level!r} y year={year}: {indicator!r}.",
+        )
+
+
 @app.get("/map-data")
 def get_map_data(
     indicator: str = "poblacion_total",
-    year: int = 2022,
-    level: str = DEFAULT_TERRITORY_LEVEL,
+    year: int = Query(default=2022, ge=1900),
+    level: TerritoryLevelId = DEFAULT_TERRITORY_LEVEL,
     parent_id: str | None = None,
     territory_ids: list[str] | None = Query(default=None),
     province_ids: list[str] | None = Query(default=None),
 ):
+    validate_indicator(indicator, level, year)
     selected_territory_ids = get_selected_territory_ids(territory_ids, province_ids)
     rows = fetch_map_data(indicator, year, level, selected_territory_ids, parent_id)
 
@@ -154,12 +168,13 @@ def get_map_data(
 @app.get("/indicator-values")
 def get_indicator_values(
     indicator: str = "poblacion_total",
-    year: int = 2022,
-    level: str = DEFAULT_TERRITORY_LEVEL,
+    year: int = Query(default=2022, ge=1900),
+    level: TerritoryLevelId = DEFAULT_TERRITORY_LEVEL,
     parent_id: str | None = None,
     territory_ids: list[str] | None = Query(default=None),
     province_ids: list[str] | None = Query(default=None),
 ):
+    validate_indicator(indicator, level, year)
     selected_territory_ids = get_selected_territory_ids(territory_ids, province_ids)
     rows = fetch_indicator_values(indicator, year, level, selected_territory_ids, parent_id)
 

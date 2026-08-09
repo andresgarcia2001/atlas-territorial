@@ -10,7 +10,7 @@ describe("indicatorCatalog", () => {
     expect(groups).toEqual([
       {
         id: "population",
-        label: "Poblacion",
+        label: "Población",
         indicators: [{ id: "poblacion_total", label: "Total" }],
       },
       {

@@ -173,7 +173,7 @@ export function App() {
         <header className="panel-header">
           <span className="eyebrow">Atlas territorial</span>
           <h1>Territorio Argentino</h1>
-          <p>Indicadores territoriales - Ano {YEAR}</p>
+          <p>Indicadores territoriales - Año {YEAR}</p>
         </header>
 
         <section className="control-block" aria-labelledby="level-heading">
@@ -261,7 +261,7 @@ export function App() {
           </div>
         </section>
 
-        <section className="control-grid" aria-label="Opciones de visualizacion">
+        <section className="control-grid" aria-label="Opciones de visualización">
           <div className="control-block is-compact">
             <div className="control-title">
               <label>Color</label>

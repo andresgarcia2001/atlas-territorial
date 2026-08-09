@@ -2,7 +2,7 @@ import json
 import os
 import re
 import unicodedata
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Mapping
 from pathlib import Path
 
@@ -85,6 +85,7 @@ class DatasetConfig:
     require_parent_id: bool = False
     indicators: dict[str, str] | None = None
     required_by_default: bool = False
+    source_env: str | None = None
 
 
 DATASETS = (
@@ -140,14 +141,16 @@ DATASETS = (
     DatasetConfig(
         name="census_radii",
         level="census_radius",
-        source=os.getenv("CENSUS_RADII_SOURCE", "INDEC / IGN"),
+        source="INDEC / IGN",
         path_env="CENSUS_RADII_GEOJSON",
         default_path="/data/radios_censales.geojson",
         id_prefix="radio_censal",
         id_property_env="CENSUS_RADIUS_ID_PROPERTY",
-        id_property_candidates=("id", "gid", "radio", "radio_id", "codigo", "codigo_radio", "CODRADIO", "link"),
+        id_property_candidates=("id", "radio", "radio_id", "codigo", "codigo_radio", "CODRADIO", "link"),
         name_property_env="CENSUS_RADIUS_NAME_PROPERTY",
         name_property_candidates=("nam", "nombre", "nombre_completo", "name", "radio", "codigo", "codigo_radio", "CODRADIO"),
+        id_must_match_pattern=r"^\d+$",
+        require_unique_external_id=True,
         parent_id_prefix="municipio",
         parent_property_env="CENSUS_RADIUS_PARENT_PROPERTY",
         parent_property_candidates=(
@@ -160,6 +163,7 @@ DATASETS = (
             "departamento_id",
             "link",
         ),
+        source_env="CENSUS_RADII_SOURCE",
     ),
 )
 
@@ -261,8 +265,8 @@ def validate_dataset(config, features, id_property, name_property):
     seen_external_ids = {}
 
     for feature in features:
-        properties = feature["properties"]
-        name = str(get_property(properties, name_property))
+        properties = get_feature_properties(feature)
+        name = resolve_name(config, properties, name_property)
         external_id = resolve_external_id(config, properties, id_property, name)
         validate_external_id(config, external_id, name)
 
@@ -312,28 +316,80 @@ def should_require_path(config):
     return config.required_by_default or bool(os.getenv(config.path_env))
 
 
-def resolve_property(properties, explicit_name, candidates, label, required=True):
+def configured_source(config):
+    if config.source_env:
+        return os.getenv(config.source_env) or config.source
+
+    return config.source
+
+
+def resolve_runtime_config(config):
+    source = configured_source(config)
+
+    if source == config.source:
+        return config
+
+    return replace(config, source=source)
+
+
+def get_feature_properties(feature):
+    properties = feature.get("properties") or {}
+
+    if isinstance(properties, dict):
+        return properties
+
+    return {}
+
+
+def flatten_available_property_names(features):
+    names = set()
+
+    for feature in features:
+        names.update(flatten_property_names(get_feature_properties(feature)))
+
+    return sorted(names)
+
+
+def has_property_in_features(features, property_path):
+    return any(has_property(get_feature_properties(feature), property_path) for feature in features)
+
+
+def resolve_property(features, explicit_name, candidates, label, required=True):
+    available_properties = ", ".join(flatten_available_property_names(features))
+
     if explicit_name:
-        if has_property(properties, explicit_name):
+        if has_property_in_features(features, explicit_name):
             return explicit_name
 
         raise SystemExit(
             f"La propiedad configurada para {label} no existe: {explicit_name}. "
-            f"Propiedades disponibles: {', '.join(sorted(flatten_property_names(properties)))}"
+            f"Propiedades disponibles: {available_properties}"
         )
 
     for candidate in candidates:
-        if has_property(properties, candidate):
+        if has_property_in_features(features, candidate):
             return candidate
 
     if required:
         raise SystemExit(
             f"No se pudo detectar la propiedad para {label}. "
             f"Configure la variable correspondiente. "
-            f"Propiedades disponibles: {', '.join(sorted(flatten_property_names(properties)))}"
+            f"Propiedades disponibles: {available_properties}"
         )
 
     return None
+
+
+def resolve_name(config, properties, name_property):
+    name = get_property(properties, name_property)
+
+    if name is not None and str(name).strip():
+        return str(name).strip()
+
+    raise SystemExit(
+        f"No se pudo resolver el nombre para {config.name}. "
+        f"La propiedad {name_property!r} no tiene valor en una feature."
+    )
 
 
 def upsert_territory(cur, config, territory_id, name, external_id, parent_id, properties, geometry):
@@ -465,11 +521,12 @@ def derive_indicators(cur, level):
 
 
 def refresh_map_data_materialized_view(cur):
-    cur.execute("REFRESH MATERIALIZED VIEW territory_indicator_map_data_mv;")
+    cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY territory_indicator_map_data_mv;")
     print("Refreshed territory_indicator_map_data_mv")
 
 
 def load_dataset(cur, config, known_territory_ids):
+    config = resolve_runtime_config(config)
     data_path = configured_path(config)
     geojson_path = Path(data_path)
 
@@ -490,16 +547,15 @@ def load_dataset(cur, config, known_territory_ids):
         print(f"Skipped {config.name}: no features")
         return 0
 
-    first_properties = features[0].get("properties", {})
     id_property = resolve_property(
-        first_properties,
+        features,
         os.getenv(config.id_property_env),
         config.id_property_candidates,
         f"{config.name}.id",
         required=config.id_from_name_map is None,
     )
     name_property = resolve_property(
-        first_properties,
+        features,
         os.getenv(config.name_property_env),
         config.name_property_candidates,
         f"{config.name}.name",
@@ -508,7 +564,7 @@ def load_dataset(cur, config, known_territory_ids):
 
     if config.parent_property_env:
         parent_property = resolve_property(
-            first_properties,
+            features,
             os.getenv(config.parent_property_env),
             config.parent_property_candidates,
             f"{config.name}.parent",
@@ -520,8 +576,8 @@ def load_dataset(cur, config, known_territory_ids):
     missing_parent_count = 0
 
     for feature in features:
-        properties = feature["properties"]
-        name = str(get_property(properties, name_property))
+        properties = get_feature_properties(feature)
+        name = resolve_name(config, properties, name_property)
         external_id = resolve_external_id(config, properties, id_property, name)
         validate_external_id(config, external_id, name)
         territory_id = build_territory_id(config.id_prefix, external_id)

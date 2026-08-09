@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -20,6 +20,18 @@ type LoadedMapData = {
   territoryLevel: string;
   year: number;
 };
+
+type LegendState =
+  | {
+      colorMode: "indicator";
+      label: string;
+      minLabel: string;
+      maxLabel: string;
+    }
+  | {
+      colorMode: "territory";
+      label: string;
+    };
 
 const MIN_LATITUDE = -90;
 const MAX_LATITUDE = 90;
@@ -84,16 +96,25 @@ function escapeHtml(value: string) {
 }
 
 function getValueRange(data: MapData) {
-  const values = data.features
-    .map((feature) => feature.properties.value)
-    .filter((value): value is number => value !== null);
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  let count = 0;
 
-  if (values.length === 0) {
-    return { min: 0, max: 1 };
+  for (const feature of data.features) {
+    const value = feature.properties.value;
+
+    if (value === null) {
+      continue;
+    }
+
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+    count += 1;
   }
 
-  const min = Math.min(...values);
-  const max = Math.max(...values);
+  if (count === 0) {
+    return { min: 0, max: 1 };
+  }
 
   return {
     min,
@@ -101,58 +122,42 @@ function getValueRange(data: MapData) {
   };
 }
 
-function getTerritoryColorExpression(data: MapData): StyleExpression {
-  const expression: StyleExpression = ["match", ["get", "id"]];
+function getTerritoryColor(territoryId: string) {
+  let hash = 0;
 
-  data.features.forEach((feature, index) => {
-    expression.push(feature.properties.id, TERRITORY_COLORS[index % TERRITORY_COLORS.length]);
-  });
+  for (let index = 0; index < territoryId.length; index += 1) {
+    hash = (hash * 31 + territoryId.charCodeAt(index)) >>> 0;
+  }
 
-  expression.push("#94a3b8");
-  return expression;
+  return TERRITORY_COLORS[hash % TERRITORY_COLORS.length];
 }
 
-function getColorExpression(
-  data: MapData,
-  colorMode: ColorMode,
-  indicator: string,
-  min: number,
-  max: number,
-): StyleExpression {
+function withTerritoryColors(data: MapData): MapData {
+  return {
+    ...data,
+    features: data.features.map((feature) => ({
+      ...feature,
+      properties: {
+        ...feature.properties,
+        territory_color: getTerritoryColor(feature.properties.id),
+      },
+    })),
+  };
+}
+
+function getTerritoryColorExpression(): StyleExpression {
+  return ["coalesce", ["get", "territory_color"], "#94a3b8"];
+}
+
+function getColorExpression(colorMode: ColorMode, min: number, max: number): StyleExpression {
   if (colorMode === "territory") {
-    return getTerritoryColorExpression(data);
-  }
-
-  if (indicator === "porcentaje_mujeres" || indicator === "porcentaje_varones") {
-    return [
-      "interpolate",
-      ["linear"],
-      ["coalesce", ["get", "value"], 50],
-      48,
-      "#38bdf8",
-      50,
-      "#e5e7eb",
-      52,
-      "#ef4444",
-    ];
-  }
-
-  if (indicator === "porcentaje_otro_x") {
-    return [
-      "interpolate",
-      ["linear"],
-      ["coalesce", ["get", "value"], 0],
-      0,
-      "#e5e7eb",
-      max,
-      "#f59e0b",
-    ];
+    return getTerritoryColorExpression();
   }
 
   return [
     "interpolate",
     ["linear"],
-    ["coalesce", ["get", "value"], 0],
+    ["coalesce", ["get", "value"], min],
     min,
     "#38bdf8",
     max,
@@ -176,6 +181,24 @@ function getHeightExpression(indicator: string, min: number, max: number): Style
 
 function getFillOpacity(colorMode: ColorMode) {
   return colorMode === "territory" ? 0.58 : 0.5;
+}
+
+function getLegend(data: MapData, layerSettings: LayerSettings): LegendState {
+  if (layerSettings.colorMode === "territory") {
+    return {
+      colorMode: "territory",
+      label: "Territorio",
+    };
+  }
+
+  const { min, max } = getValueRange(data);
+
+  return {
+    colorMode: "indicator",
+    label: formatIndicatorName(layerSettings.indicator),
+    minLabel: formatValue(min),
+    maxLabel: formatValue(max),
+  };
 }
 
 function clampLatitude(latitude: number) {
@@ -213,12 +236,12 @@ function updateTerritoryPaint(
 ) {
   const { colorMode, indicator } = layerSettings;
 
-  map.setPaintProperty("territories-fill", "fill-color", getColorExpression(data, colorMode, indicator, min, max));
+  map.setPaintProperty("territories-fill", "fill-color", getColorExpression(colorMode, min, max));
   map.setPaintProperty("territories-fill", "fill-opacity", getFillOpacity(colorMode));
   map.setPaintProperty(
     "territories-extrusion",
     "fill-extrusion-color",
-    getColorExpression(data, colorMode, indicator, min, max),
+    getColorExpression(colorMode, min, max),
   );
   map.setPaintProperty("territories-extrusion", "fill-extrusion-height", getHeightExpression(indicator, min, max));
 }
@@ -255,7 +278,7 @@ function addTerritoryLayers(
     type: "fill",
     source: "territories",
     paint: {
-      "fill-color": getColorExpression(data, colorMode, indicator, min, max) as never,
+      "fill-color": getColorExpression(colorMode, min, max) as never,
       "fill-opacity": getFillOpacity(colorMode),
     },
   });
@@ -268,7 +291,7 @@ function addTerritoryLayers(
       visibility: "none",
     },
     paint: {
-      "fill-extrusion-color": getColorExpression(data, colorMode, indicator, min, max) as never,
+      "fill-extrusion-color": getColorExpression(colorMode, min, max) as never,
       "fill-extrusion-height": getHeightExpression(indicator, min, max) as never,
       "fill-extrusion-base": 0,
       "fill-extrusion-opacity": 0.58,
@@ -298,7 +321,7 @@ function addTerritoryLayers(
         .setHTML(`
           <strong>${escapeHtml(feature.properties.name)}</strong><br />
           ${escapeHtml(formatIndicatorName(feature.properties.indicator))}: ${formatValue(feature.properties.value)}<br />
-          Ano: ${feature.properties.year}
+          Año: ${feature.properties.year}
         `)
         .addTo(map);
     });
@@ -342,6 +365,7 @@ export function MapView({ colorMode, indicator, onDataError, territoryIds, terri
   const loadedDataRef = useRef<LoadedMapData | null>(null);
   const latestLayerSettingsRef = useRef<LayerSettings>({ colorMode, indicator, territoryIds, territoryLevel, viewMode });
   const lastFitKeyRef = useRef<string | null>(null);
+  const [legend, setLegend] = useState<LegendState | null>(null);
   const territoryKey = useMemo(() => getTerritoryFilterKey(territoryIds), [territoryIds]);
 
   latestLayerSettingsRef.current = { colorMode, indicator, territoryIds, territoryLevel, viewMode };
@@ -398,7 +422,7 @@ export function MapView({ colorMode, indicator, onDataError, territoryIds, terri
 
     async function loadData() {
       try {
-        const data = await fetchMapData(indicator, year, territoryLevel, territoryIds);
+        const data = withTerritoryColors(await fetchMapData(indicator, year, territoryLevel, territoryIds));
 
         if (isCancelled) {
           return;
@@ -407,9 +431,11 @@ export function MapView({ colorMode, indicator, onDataError, territoryIds, terri
         const applyData = () => {
           const fitKey = `${territoryLevel}:${territoryKey}`;
           const shouldFitMap = lastFitKeyRef.current !== fitKey;
+          const layerSettings = latestLayerSettingsRef.current;
 
           loadedDataRef.current = { data, indicator, territoryKey, territoryLevel, year };
-          renderTerritoryData(mapInstance, data, latestLayerSettingsRef.current, shouldFitMap);
+          renderTerritoryData(mapInstance, data, layerSettings, shouldFitMap);
+          setLegend(getLegend(data, layerSettings));
           lastFitKeyRef.current = fitKey;
           onDataError?.(null);
         };
@@ -427,6 +453,7 @@ export function MapView({ colorMode, indicator, onDataError, territoryIds, terri
         }
       } catch (caughtError) {
         if (!isCancelled) {
+          setLegend(null);
           onDataError?.(caughtError instanceof Error ? caughtError.message : "No se pudieron cargar los datos.");
         }
       }
@@ -454,8 +481,34 @@ export function MapView({ colorMode, indicator, onDataError, territoryIds, terri
       return;
     }
 
-    renderTerritoryData(map, loadedData.data, { colorMode, indicator, territoryIds, territoryLevel, viewMode }, false);
+    const layerSettings = { colorMode, indicator, territoryIds, territoryLevel, viewMode };
+    renderTerritoryData(map, loadedData.data, layerSettings, false);
+    setLegend(getLegend(loadedData.data, layerSettings));
   }, [colorMode, indicator, territoryIds, territoryKey, territoryLevel, viewMode, year]);
 
-  return <main id="map" ref={containerRef} aria-label="Mapa de indicadores territoriales" />;
+  return (
+    <main className="map-shell" aria-label="Mapa de indicadores territoriales">
+      <div id="map" ref={containerRef} />
+      {legend && (
+        <aside className="map-legend" aria-label="Leyenda del mapa">
+          <span>{legend.label}</span>
+          {legend.colorMode === "indicator" ? (
+            <>
+              <div className="legend-gradient" />
+              <div className="legend-scale">
+                <small>{legend.minLabel}</small>
+                <small>{legend.maxLabel}</small>
+              </div>
+            </>
+          ) : (
+            <div className="legend-swatches">
+              {TERRITORY_COLORS.slice(0, 8).map((territoryColor) => (
+                <i key={territoryColor} style={{ backgroundColor: territoryColor }} />
+              ))}
+            </div>
+          )}
+        </aside>
+      )}
+    </main>
+  );
 }
