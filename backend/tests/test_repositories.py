@@ -48,6 +48,8 @@ def test_fetch_map_data_uses_left_join_for_missing_indicator_values(monkeypatch)
 
     assert rows == []
     assert "LEFT JOIN indicators i" in cursor.executed_query
+    assert "mv.bar_center" in cursor.executed_query
+    assert "mv.bar_geometry" in cursor.executed_query
     assert "NOT EXISTS" not in cursor.executed_query
     assert cursor.executed_params == (
         "poblacion_total",
@@ -73,6 +75,8 @@ def test_fetch_territories_with_geometry_reads_cached_map_geometry(monkeypatch):
     assert rows == []
     assert "FROM territory_indicator_map_data_mv mv" in cursor.executed_query
     assert "ST_AsGeoJSON(geom)" not in cursor.executed_query
+    assert "mv.bar_center" in cursor.executed_query
+    assert "mv.bar_geometry" in cursor.executed_query
     assert cursor.executed_params == (
         "municipality",
         "provincia_02",

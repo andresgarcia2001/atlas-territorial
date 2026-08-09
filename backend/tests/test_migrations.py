@@ -95,6 +95,18 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
 
                 cur.execute(
                     """
+                    SELECT attname
+                    FROM pg_attribute
+                    WHERE attrelid = 'public.territory_indicator_map_data_mv'::regclass
+                      AND attnum > 0
+                      AND NOT attisdropped;
+                    """
+                )
+                map_data_columns = {row[0] for row in cur.fetchall()}
+                assert {"geometry", "bar_center", "bar_geometry"} <= map_data_columns
+
+                cur.execute(
+                    """
                     SELECT indexname
                     FROM pg_indexes
                     WHERE schemaname = 'public'
@@ -168,7 +180,30 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
                       t.source,
                       t.external_id,
                       t.parent_id,
-                      ST_AsGeoJSON(t.geom)::json AS geometry,
+                      ST_AsGeoJSON(
+                        ST_Multi(
+                          CASE
+                            WHEN t.level_id = 'province' THEN ST_SimplifyPreserveTopology(t.geom, 0.01)
+                            WHEN t.level_id = 'municipality' THEN ST_SimplifyPreserveTopology(t.geom, 0.002)
+                            ELSE t.geom
+                          END
+                        ),
+                        5
+                      )::json AS geometry,
+                      ST_AsGeoJSON(
+                        ST_PointOnSurface(t.geom),
+                        5
+                      )::json AS bar_center,
+                      ST_AsGeoJSON(
+                        ST_Multi(
+                          CASE
+                            WHEN t.level_id = 'province' THEN ST_SimplifyPreserveTopology(t.geom, 0.01)
+                            WHEN t.level_id = 'municipality' THEN ST_SimplifyPreserveTopology(t.geom, 0.002)
+                            ELSE t.geom
+                          END
+                        ),
+                        5
+                      )::json AS bar_geometry,
                       i.indicator_value
                     FROM territories t
                     LEFT JOIN indicators i

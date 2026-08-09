@@ -44,6 +44,12 @@ describe("territoryMetadata", () => {
     expect(
       areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
         ...DEFAULT_LAYER_SETTINGS,
+        geometryMode: "bars",
+      }),
+    ).toBe(false);
+    expect(
+      areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
+        ...DEFAULT_LAYER_SETTINGS,
         territoryIds: ["provincia_02"],
       }),
     ).toBe(false);

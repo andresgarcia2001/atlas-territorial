@@ -150,6 +150,12 @@ cd frontend
 npm run test:unit
 ```
 
+CI:
+
+El workflow `.github/workflows/ci.yml` corre `python -m pytest` con un servicio
+PostGIS y `npm run test:unit` para el frontend en cada pull request y en cada
+push.
+
 ## Cargar territorios
 
 Preparar municipios IGN:
@@ -233,6 +239,16 @@ Para municipios IGN, `in1` debe existir, ser unico y tener seis digitos. El
 provincia cargada. Si falta el padre, el loader falla en vez de cargar
 municipios huerfanos.
 
+Para exploracion local se puede optar explicitamente por saltar filas huerfanas:
+
+```powershell
+docker-compose --profile tools run --rm loader python load_territories.py --skip-orphans
+```
+
+Ese modo no cambia el comportamiento por defecto. Solo omite features cuyo padre
+obligatorio no exista y reporta en consola cada territorio saltado con su padre
+faltante.
+
 ## Materialized View de mapa
 
 `/territories` y `/map-data` leen geometria desde `territory_indicator_map_data_mv`,
@@ -242,6 +258,12 @@ indicador. Los valores se resuelven con un `LEFT JOIN` contra `indicators`, la
 misma semantica que usa `/indicator-values`. La geometria se publica con precision
 reducida y simplificacion por nivel para que el endpoint siga siendo usable en el
 navegador.
+
+La MV tambien publica `bar_center` y `bar_geometry` como propiedades GeoJSON
+calculadas en PostGIS. `bar_geometry` usa el footprint simplificado del
+territorio para que el prisma 3D cubra toda la provincia, municipio o radio
+seleccionado sin calcular geometria en React. Si el frontend no recibe esos
+campos, degrada al relieve extruido de poligonos.
 
 La vista puede quedar desactualizada si se insertan o actualizan territorios o
 indicadores manualmente. El loader ejecuta:
@@ -290,7 +312,9 @@ Y calcula indicadores derivados por nivel territorial:
 - `densidad_poblacional`
 
 El modo 3D no usa elevacion real del terreno: la altura representa el valor del
-indicador seleccionado.
+indicador seleccionado. La camara 2D/3D se controla aparte de la geometria 3D,
+que puede usar el relieve extruido de poligonos o barras por footprint territorial
+calculadas en la MV.
 
 ## Pasos rapidos para levantarlo
 

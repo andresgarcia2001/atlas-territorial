@@ -13,7 +13,15 @@ import {
   getTerritoryLevelsOrFallback,
   getTerritorySelectionLabel,
 } from "./territoryMetadata";
-import type { ColorMode, LayerSettings, TerritoryLevel, TerritoryLevelId, TerritoryOption, ViewMode } from "./types";
+import type {
+  ColorMode,
+  GeometryMode,
+  LayerSettings,
+  TerritoryLevel,
+  TerritoryLevelId,
+  TerritoryOption,
+  ViewMode,
+} from "./types";
 
 const YEAR = 2022;
 
@@ -25,6 +33,11 @@ const COLOR_MODE_LABELS: Record<ColorMode, string> = {
 const VIEW_MODE_LABELS: Record<ViewMode, string> = {
   flat: "2D",
   extruded: "3D",
+};
+
+const GEOMETRY_MODE_LABELS: Record<GeometryMode, string> = {
+  surface: "Relieve",
+  bars: "Barras",
 };
 
 export function App() {
@@ -309,6 +322,30 @@ export function App() {
               </button>
             </div>
           </div>
+
+          <div className="control-block is-compact">
+            <div className="control-title">
+              <label>3D</label>
+            </div>
+            <div className="segmented" role="group" aria-label="Geometría 3D">
+              <button
+                aria-pressed={draftLayer.geometryMode === "surface"}
+                className={draftLayer.geometryMode === "surface" ? "segment is-active" : "segment"}
+                type="button"
+                onClick={() => updateDraftLayer({ geometryMode: "surface" })}
+              >
+                Relieve
+              </button>
+              <button
+                aria-pressed={draftLayer.geometryMode === "bars"}
+                className={draftLayer.geometryMode === "bars" ? "segment is-active" : "segment"}
+                type="button"
+                onClick={() => updateDraftLayer({ geometryMode: "bars" })}
+              >
+                Barras
+              </button>
+            </div>
+          </div>
         </section>
 
         <button className="apply-button" type="button" disabled={!hasPendingChanges} onClick={applyDraftLayer}>
@@ -320,7 +357,7 @@ export function App() {
           <strong>{selectedAppliedIndicator.label}</strong>
           <p>
             Nivel: {selectedAppliedLevel.label} - Color: {COLOR_MODE_LABELS[appliedLayer.colorMode]} - Vista:{" "}
-            {VIEW_MODE_LABELS[appliedLayer.viewMode]}
+            {VIEW_MODE_LABELS[appliedLayer.viewMode]} - 3D: {GEOMETRY_MODE_LABELS[appliedLayer.geometryMode]}
           </p>
           <p>Territorios: {getTerritorySelectionLabel(appliedLayer.territoryIds, appliedTerritoryOptions)}</p>
         </section>
@@ -333,6 +370,7 @@ export function App() {
         colorMode={appliedLayer.colorMode}
         indicator={appliedLayer.indicator}
         onDataError={setMapError}
+        geometryMode={appliedLayer.geometryMode}
         territoryIds={appliedLayer.territoryIds}
         territoryLevel={appliedLayer.territoryLevel}
         viewMode={appliedLayer.viewMode}

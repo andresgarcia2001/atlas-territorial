@@ -4,8 +4,10 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import { fetchIndicatorValues, fetchTerritories } from "../api";
 import { getIndicatorLabel } from "../indicatorCatalog";
+import { getCameraPreset, getLayerVisibility } from "../mapModes";
 import type {
   ColorMode,
+  GeometryMode,
   IndicatorValue,
   LayerSettings,
   MapData,
@@ -53,6 +55,14 @@ type LegendState =
 
 const MIN_LATITUDE = -90;
 const MAX_LATITUDE = 90;
+const TERRITORY_SOURCE_ID = "territories";
+const TERRITORY_BARS_SOURCE_ID = "territory-bars";
+const INTERACTIVE_TERRITORY_LAYER_IDS = [
+  "territories-fill",
+  "territories-extrusion",
+  "territory-bars-fill",
+  "territory-bars-extrusion",
+];
 
 const TERRITORY_COLORS = [
   "#22c55e",
@@ -134,10 +144,14 @@ function getValueRange(data: MapData) {
     return { min: 0, max: 1 };
   }
 
-  return {
-    min,
-    max: min === max ? min + 1 : max,
-  };
+  if (min === max) {
+    return {
+      min: Math.min(0, min),
+      max: Math.max(min, 1),
+    };
+  }
+
+  return { min, max };
 }
 
 function getTerritoryColor(territoryId: string) {
@@ -195,7 +209,7 @@ function getColorExpression(colorMode: ColorMode, min: number, max: number): Sty
   ];
 }
 
-function getHeightExpression(indicator: string, min: number, max: number): StyleExpression {
+function getSurfaceHeightExpression(indicator: string, min: number, max: number): StyleExpression {
   const maxHeight = indicator.startsWith("porcentaje_") ? 320 : 1400;
 
   return [
@@ -204,6 +218,20 @@ function getHeightExpression(indicator: string, min: number, max: number): Style
     ["coalesce", ["get", "value"], 0],
     min,
     20,
+    max,
+    maxHeight,
+  ];
+}
+
+function getBarHeightExpression(indicator: string, min: number, max: number): StyleExpression {
+  const maxHeight = indicator.startsWith("porcentaje_") ? 70000 : 120000;
+
+  return [
+    "interpolate",
+    ["linear"],
+    ["coalesce", ["get", "value"], 0],
+    min,
+    8000,
     max,
     maxHeight,
   ];
@@ -228,6 +256,28 @@ function getLegend(data: MapData, layerSettings: LayerSettings): LegendState {
     label: formatIndicatorName(layerSettings.indicator),
     minLabel: formatValue(min),
     maxLabel: formatValue(max),
+  };
+}
+
+function hasBarGeometry(data: MapData) {
+  return data.features.some((feature) => Boolean(feature.properties.bar_geometry));
+}
+
+function composeBarMapData(data: MapData): MapData {
+  return {
+    ...data,
+    features: data.features.flatMap((feature) => {
+      const barGeometry = feature.properties.bar_geometry;
+
+      return barGeometry
+        ? [
+            {
+              ...feature,
+              geometry: barGeometry,
+            },
+          ]
+        : [];
+    }),
   };
 }
 
@@ -268,26 +318,55 @@ function updateTerritoryPaint(
 
   map.setPaintProperty("territories-fill", "fill-color", getColorExpression(colorMode, min, max));
   map.setPaintProperty("territories-fill", "fill-opacity", getFillOpacity(colorMode));
-  map.setPaintProperty(
-    "territories-extrusion",
-    "fill-extrusion-color",
-    getColorExpression(colorMode, min, max),
-  );
-  map.setPaintProperty("territories-extrusion", "fill-extrusion-height", getHeightExpression(indicator, min, max));
+  if (map.getLayer("territories-extrusion")) {
+    map.setPaintProperty("territories-extrusion", "fill-extrusion-color", getColorExpression(colorMode, min, max));
+    map.setPaintProperty(
+      "territories-extrusion",
+      "fill-extrusion-height",
+      getSurfaceHeightExpression(indicator, min, max),
+    );
+  }
+
+  if (map.getLayer("territory-bars-extrusion")) {
+    map.setPaintProperty("territory-bars-extrusion", "fill-extrusion-color", getColorExpression(colorMode, min, max));
+    map.setPaintProperty(
+      "territory-bars-extrusion",
+      "fill-extrusion-height",
+      getBarHeightExpression(indicator, min, max),
+    );
+  }
+
+  if (map.getLayer("territory-bars-fill")) {
+    map.setPaintProperty("territory-bars-fill", "fill-color", getColorExpression(colorMode, min, max));
+  }
 }
 
-function applyViewMode(map: maplibregl.Map, viewMode: ViewMode) {
-  if (!map.getLayer("territories-fill") || !map.getLayer("territories-extrusion")) {
+function applyViewMode(
+  map: maplibregl.Map,
+  viewMode: ViewMode,
+  geometryMode: GeometryMode,
+  hasAvailableBarGeometry: boolean,
+) {
+  if (
+    !map.getLayer("territories-fill") ||
+    !map.getLayer("territories-outline") ||
+    !map.getLayer("territories-extrusion") ||
+    !map.getLayer("territory-bars-fill") ||
+    !map.getLayer("territory-bars-extrusion") ||
+    !map.getLayer("territory-bars-outline")
+  ) {
     return;
   }
 
-  map.setLayoutProperty("territories-fill", "visibility", viewMode === "flat" ? "visible" : "none");
-  map.setLayoutProperty("territories-extrusion", "visibility", viewMode === "extruded" ? "visible" : "none");
-  map.easeTo({
-    pitch: viewMode === "extruded" ? 45 : 0,
-    bearing: viewMode === "extruded" ? -18 : 0,
-    duration: 350,
-  });
+  const visibility = getLayerVisibility(viewMode, geometryMode, hasAvailableBarGeometry);
+
+  map.setLayoutProperty("territories-fill", "visibility", visibility.fill);
+  map.setLayoutProperty("territories-outline", "visibility", visibility.outline);
+  map.setLayoutProperty("territories-extrusion", "visibility", visibility.surfaceExtrusion);
+  map.setLayoutProperty("territory-bars-fill", "visibility", visibility.barFill);
+  map.setLayoutProperty("territory-bars-extrusion", "visibility", visibility.barExtrusion);
+  map.setLayoutProperty("territory-bars-outline", "visibility", visibility.barOutline);
+  map.easeTo(getCameraPreset(viewMode));
 }
 
 function addTerritoryLayers(
@@ -297,16 +376,22 @@ function addTerritoryLayers(
   indicator: string,
 ) {
   const { min, max } = getValueRange(data);
+  const barData = composeBarMapData(data);
 
-  map.addSource("territories", {
+  map.addSource(TERRITORY_SOURCE_ID, {
     type: "geojson",
     data,
+  });
+
+  map.addSource(TERRITORY_BARS_SOURCE_ID, {
+    type: "geojson",
+    data: barData,
   });
 
   map.addLayer({
     id: "territories-fill",
     type: "fill",
-    source: "territories",
+    source: TERRITORY_SOURCE_ID,
     paint: {
       "fill-color": getColorExpression(colorMode, min, max) as never,
       "fill-opacity": getFillOpacity(colorMode),
@@ -316,29 +401,71 @@ function addTerritoryLayers(
   map.addLayer({
     id: "territories-extrusion",
     type: "fill-extrusion",
-    source: "territories",
+    source: TERRITORY_SOURCE_ID,
     layout: {
       visibility: "none",
     },
     paint: {
       "fill-extrusion-color": getColorExpression(colorMode, min, max) as never,
-      "fill-extrusion-height": getHeightExpression(indicator, min, max) as never,
+      "fill-extrusion-height": getSurfaceHeightExpression(indicator, min, max) as never,
       "fill-extrusion-base": 0,
       "fill-extrusion-opacity": 0.58,
     },
   });
 
   map.addLayer({
+    id: "territory-bars-fill",
+    type: "fill",
+    source: TERRITORY_BARS_SOURCE_ID,
+    layout: {
+      visibility: "none",
+    },
+    paint: {
+      "fill-color": getColorExpression(colorMode, min, max) as never,
+      "fill-opacity": 0.86,
+    },
+  });
+
+  map.addLayer({
+    id: "territory-bars-extrusion",
+    type: "fill-extrusion",
+    source: TERRITORY_BARS_SOURCE_ID,
+    layout: {
+      visibility: "none",
+    },
+    paint: {
+      "fill-extrusion-color": getColorExpression(colorMode, min, max) as never,
+      "fill-extrusion-height": getBarHeightExpression(indicator, min, max) as never,
+      "fill-extrusion-base": 0,
+      "fill-extrusion-opacity": 0.94,
+    },
+  });
+
+  map.addLayer({
+    id: "territory-bars-outline",
+    type: "line",
+    source: TERRITORY_BARS_SOURCE_ID,
+    layout: {
+      visibility: "none",
+    },
+    paint: {
+      "line-color": "#111816",
+      "line-opacity": 0.28,
+      "line-width": 1,
+    },
+  });
+
+  map.addLayer({
     id: "territories-outline",
     type: "line",
-    source: "territories",
+    source: TERRITORY_SOURCE_ID,
     paint: {
       "line-color": "#f9fafb",
       "line-width": 1.2,
     },
   });
 
-  for (const layerId of ["territories-fill", "territories-extrusion"]) {
+  for (const layerId of INTERACTIVE_TERRITORY_LAYER_IDS) {
     map.on("click", layerId, (event) => {
       const feature = event.features?.[0] as unknown as MapFeature | undefined;
 
@@ -372,11 +499,14 @@ function renderTerritoryData(
   layerSettings: LayerSettings,
   shouldFitMap: boolean,
 ) {
-  const source = map.getSource("territories") as maplibregl.GeoJSONSource | undefined;
+  const source = map.getSource(TERRITORY_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  const barSource = map.getSource(TERRITORY_BARS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
   const { min, max } = getValueRange(loadedData);
+  const barData = composeBarMapData(loadedData);
 
   if (source) {
     source.setData(loadedData);
+    barSource?.setData(barData);
     updateTerritoryPaint(map, loadedData, layerSettings, min, max);
   } else {
     addTerritoryLayers(map, loadedData, layerSettings.colorMode, layerSettings.indicator);
@@ -386,21 +516,37 @@ function renderTerritoryData(
     fitMapToData(map, loadedData);
   }
 
-  applyViewMode(map, layerSettings.viewMode);
+  applyViewMode(map, layerSettings.viewMode, layerSettings.geometryMode, hasBarGeometry(loadedData));
 }
 
-export function MapView({ colorMode, indicator, onDataError, territoryIds, territoryLevel, viewMode, year }: MapViewProps) {
+export function MapView({
+  colorMode,
+  geometryMode,
+  indicator,
+  onDataError,
+  territoryIds,
+  territoryLevel,
+  viewMode,
+  year,
+}: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const loadedTerritoryDataRef = useRef<LoadedTerritoryData | null>(null);
   const loadedIndicatorValuesRef = useRef<LoadedIndicatorValues | null>(null);
   const renderedDataRef = useRef<LoadedMapData | null>(null);
-  const latestLayerSettingsRef = useRef<LayerSettings>({ colorMode, indicator, territoryIds, territoryLevel, viewMode });
+  const latestLayerSettingsRef = useRef<LayerSettings>({
+    colorMode,
+    geometryMode,
+    indicator,
+    territoryIds,
+    territoryLevel,
+    viewMode,
+  });
   const lastFitKeyRef = useRef<string | null>(null);
   const [legend, setLegend] = useState<LegendState | null>(null);
   const territoryKey = useMemo(() => getTerritoryFilterKey(territoryIds), [territoryIds]);
 
-  latestLayerSettingsRef.current = { colorMode, indicator, territoryIds, territoryLevel, viewMode };
+  latestLayerSettingsRef.current = { colorMode, geometryMode, indicator, territoryIds, territoryLevel, viewMode };
 
   function renderCurrentData(map: maplibregl.Map, shouldFitMap: boolean) {
     const territoryData = loadedTerritoryDataRef.current;
@@ -596,10 +742,10 @@ export function MapView({ colorMode, indicator, onDataError, territoryIds, terri
       return;
     }
 
-    const layerSettings = { colorMode, indicator, territoryIds, territoryLevel, viewMode };
+    const layerSettings = { colorMode, geometryMode, indicator, territoryIds, territoryLevel, viewMode };
     renderTerritoryData(map, loadedData.data, layerSettings, false);
     setLegend(getLegend(loadedData.data, layerSettings));
-  }, [colorMode, indicator, territoryIds, territoryKey, territoryLevel, viewMode, year]);
+  }, [colorMode, geometryMode, indicator, territoryIds, territoryKey, territoryLevel, viewMode, year]);
 
   return (
     <main className="map-shell" aria-label="Mapa de indicadores territoriales">

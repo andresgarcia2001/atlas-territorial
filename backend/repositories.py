@@ -32,7 +32,9 @@ def fetch_territories_with_geometry(level=DEFAULT_TERRITORY_LEVEL, parent_id=Non
           mv.source,
           mv.external_id,
           mv.parent_id,
-          mv.geometry
+          mv.geometry,
+          mv.bar_center,
+          mv.bar_geometry
         FROM territory_indicator_map_data_mv mv
         WHERE mv.level_id = %s
           AND (%s::text IS NULL OR mv.parent_id = %s)
@@ -88,6 +90,8 @@ def fetch_map_data(indicator, year, level=DEFAULT_TERRITORY_LEVEL, territory_ids
           mv.external_id,
           mv.parent_id,
           mv.geometry,
+          mv.bar_center,
+          mv.bar_geometry,
           i.indicator_value
         FROM territory_indicator_map_data_mv mv
         LEFT JOIN indicators i

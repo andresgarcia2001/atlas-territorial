@@ -354,6 +354,62 @@ def test_load_dataset_rejects_missing_required_parent(monkeypatch, tmp_path):
         load_territories.load_dataset(object(), config, set())
 
 
+def test_load_dataset_skips_missing_required_parent_when_flag_is_enabled(monkeypatch, tmp_path, capsys):
+    geojson_path = write_geojson(
+        tmp_path,
+        [
+            polygon_feature({"in1": "060735", "nam": "San Antonio de Areco"}),
+            polygon_feature({"in1": "990001", "nam": "Municipio Huerfano"}),
+        ],
+    )
+    config = load_territories.DatasetConfig(
+        name="ign_municipalities_test",
+        level="municipality",
+        source="IGN WFS ign:municipio",
+        path_env="TEST_IGN_MUNICIPALITIES_GEOJSON",
+        default_path=str(geojson_path),
+        id_prefix="municipio",
+        id_property_env="TEST_IGN_MUNICIPALITY_ID_PROPERTY",
+        id_property_candidates=("in1",),
+        name_property_env="TEST_IGN_MUNICIPALITY_NAME_PROPERTY",
+        name_property_candidates=("nam",),
+        id_must_match_pattern=r"^\d{6}$",
+        require_unique_external_id=True,
+        parent_id_prefix="provincia",
+        parent_property_env="TEST_IGN_MUNICIPALITY_PARENT_PROPERTY",
+        parent_property_candidates=("cod_prov",),
+        derive_parent_from_external_id_prefix_length=2,
+        require_parent_id=True,
+    )
+    upserted_territories = []
+
+    def fake_upsert_territory(cur, config, territory_id, name, external_id, parent_id, properties, geometry):
+        upserted_territories.append(
+            {
+                "territory_id": territory_id,
+                "name": name,
+                "parent_id": parent_id,
+            }
+        )
+
+    monkeypatch.delenv("TEST_IGN_MUNICIPALITIES_GEOJSON", raising=False)
+    monkeypatch.setattr(load_territories, "upsert_territory", fake_upsert_territory)
+
+    loaded_count = load_territories.load_dataset(object(), config, {"provincia_06"}, skip_orphans=True)
+
+    captured = capsys.readouterr()
+    assert loaded_count == 1
+    assert upserted_territories == [
+        {
+            "territory_id": "municipio_060735",
+            "name": "San Antonio de Areco",
+            "parent_id": "provincia_06",
+        }
+    ]
+    assert "Skipped 1 orphan ign_municipalities_test features" in captured.out
+    assert "municipio_990001 (Municipio Huerfano) missing parent provincia_99" in captured.out
+
+
 def test_property_helpers_return_nested_paths():
     properties = {"nombre": "Municipio Uno", "provincia": {"id": "02"}}
 
@@ -458,7 +514,11 @@ def test_main_refreshes_map_data_materialized_view_after_loading(monkeypatch):
 
     monkeypatch.setattr(load_territories, "get_connection", fake_get_connection)
     monkeypatch.setattr(load_territories, "fetch_existing_territory_ids", lambda cur: set())
-    monkeypatch.setattr(load_territories, "load_dataset", lambda cur, config, known_ids: events.append("load") or 1)
+    def fake_load_dataset(cur, config, known_ids, skip_orphans=False):
+        assert not skip_orphans
+        return events.append("load") or 1
+
+    monkeypatch.setattr(load_territories, "load_dataset", fake_load_dataset)
     monkeypatch.setattr(load_territories, "refresh_map_data_materialized_view", lambda cur: events.append("refresh"))
 
     load_territories.main()

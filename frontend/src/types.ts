@@ -30,6 +30,11 @@ export type MultiPolygonGeometry = {
   coordinates: number[][][][];
 };
 
+export type PointGeometry = {
+  type: "Point";
+  coordinates: [number, number];
+};
+
 export type TerritoryProperties = {
   id: string;
   name: string;
@@ -37,6 +42,8 @@ export type TerritoryProperties = {
   source: string;
   external_id: string;
   parent_id: string | null;
+  bar_center?: PointGeometry | null;
+  bar_geometry?: MultiPolygonGeometry | null;
 };
 
 export type TerritoryFeature = {
@@ -84,10 +91,13 @@ export type ColorMode = "indicator" | "territory";
 
 export type ViewMode = "flat" | "extruded";
 
+export type GeometryMode = "surface" | "bars";
+
 export type LayerSettings = {
   indicator: string;
   colorMode: ColorMode;
   viewMode: ViewMode;
+  geometryMode: GeometryMode;
   territoryLevel: TerritoryLevelId;
   territoryIds: string[];
 };

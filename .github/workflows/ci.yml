@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: territorio_argentino
+          POSTGRES_USER: territorio
+          POSTGRES_PASSWORD: territorio
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U territorio -d territorio_argentino"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: territorio_argentino
+      POSTGRES_USER: territorio
+      POSTGRES_PASSWORD: territorio
+      TEST_POSTGRES_HOST: localhost
+      TEST_POSTGRES_PORT: "5432"
+      TEST_POSTGRES_USER: territorio
+      TEST_POSTGRES_PASSWORD: territorio
+      TEST_POSTGRES_ADMIN_DB: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+      - name: Install backend dependencies
+        run: python -m pip install -r backend/requirements-dev.txt
+      - name: Run backend tests
+        run: python -m pytest
+
+  frontend:
+    name: Frontend unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Run frontend tests
+        run: npm run test:unit

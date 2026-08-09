@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import re
@@ -560,7 +561,7 @@ def refresh_map_data_materialized_view(cur):
     print("Refreshed territory_indicator_map_data_mv")
 
 
-def load_dataset(cur, config, known_territory_ids):
+def load_dataset(cur, config, known_territory_ids, skip_orphans=False):
     config = resolve_runtime_config(config)
     data_path = configured_path(config)
     geojson_path = Path(data_path)
@@ -609,6 +610,7 @@ def load_dataset(cur, config, known_territory_ids):
     validate_dataset(config, features, id_property, name_property)
 
     missing_parent_count = 0
+    skipped_orphans = []
     loaded_territory_ids = set()
 
     for feature in features:
@@ -624,6 +626,10 @@ def load_dataset(cur, config, known_territory_ids):
             parent_id = build_territory_id(config.parent_id_prefix, parent_external_id)
             if parent_id not in known_territory_ids:
                 if config.require_parent_id:
+                    if skip_orphans:
+                        skipped_orphans.append((territory_id, name, parent_id))
+                        continue
+
                     raise SystemExit(
                         f"No se encontro el territorio padre {parent_id} para {config.name}: {name}. "
                         f"Cargue primero el nivel padre con IDs canonicos."
@@ -656,21 +662,35 @@ def load_dataset(cur, config, known_territory_ids):
     if config.indicators:
         derive_indicators(cur, config.level)
 
-    print(f"Loaded {len(features)} {config.name}")
+    print(f"Loaded {len(loaded_territory_ids)} {config.name}")
     if missing_parent_count:
         print(f"Skipped {missing_parent_count} parent links for {config.name}: parent territory was not loaded")
+    if skipped_orphans:
+        print(f"Skipped {len(skipped_orphans)} orphan {config.name} features: parent territory was not loaded")
+        for territory_id, name, parent_id in skipped_orphans:
+            print(f"  - {territory_id} ({name}) missing parent {parent_id}")
 
-    return len(features)
+    return len(loaded_territory_ids)
 
 
-def main():
+def parse_args():
+    parser = argparse.ArgumentParser(description="Load territorial GeoJSON files into PostGIS.")
+    parser.add_argument(
+        "--skip-orphans",
+        action="store_true",
+        help="Skip features with missing required parents and print a report instead of failing fast.",
+    )
+    return parser.parse_args()
+
+
+def main(skip_orphans=False):
     total_loaded = 0
 
     with get_connection() as conn:
         with conn.cursor() as cur:
             known_territory_ids = fetch_existing_territory_ids(cur)
             for config in DATASETS:
-                total_loaded += load_dataset(cur, config, known_territory_ids)
+                total_loaded += load_dataset(cur, config, known_territory_ids, skip_orphans=skip_orphans)
 
     with get_connection() as conn:
         conn.autocommit = True
@@ -681,4 +701,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(skip_orphans=args.skip_orphans)

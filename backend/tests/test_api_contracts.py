@@ -11,6 +11,11 @@ def test_map_data_returns_geojson_feature_collection_contract(monkeypatch):
         "type": "MultiPolygon",
         "coordinates": [[[[0, 0], [1, 0], [1, 1], [0, 0]]]],
     }
+    bar_center = {"type": "Point", "coordinates": [0.5, 0.5]}
+    bar_geometry = {
+        "type": "MultiPolygon",
+        "coordinates": [[[[0.45, 0.45], [0.55, 0.45], [0.55, 0.55], [0.45, 0.55], [0.45, 0.45]]]],
+    }
 
     def fake_fetch_map_data(indicator, year, level, territory_ids=None, parent_id=None):
         captured_args.update(
@@ -31,6 +36,8 @@ def test_map_data_returns_geojson_feature_collection_contract(monkeypatch):
                 "02",
                 None,
                 geometry,
+                bar_center,
+                bar_geometry,
                 17523996.0,
             )
         ]
@@ -71,10 +78,48 @@ def test_map_data_returns_geojson_feature_collection_contract(monkeypatch):
                 "indicator": "poblacion_total",
                 "value": 17523996.0,
                 "year": 2022,
+                "bar_center": bar_center,
+                "bar_geometry": bar_geometry,
             },
             "geometry": geometry,
         }
     ]
+
+
+def test_territories_returns_bar_geometry_contract(monkeypatch):
+    geometry = {
+        "type": "MultiPolygon",
+        "coordinates": [[[[0, 0], [1, 0], [1, 1], [0, 0]]]],
+    }
+    bar_center = {"type": "Point", "coordinates": [0.5, 0.5]}
+    bar_geometry = {
+        "type": "MultiPolygon",
+        "coordinates": [[[[0.45, 0.45], [0.55, 0.45], [0.55, 0.55], [0.45, 0.55], [0.45, 0.45]]]],
+    }
+
+    def fake_fetch_territories_with_geometry(level, parent_id=None, territory_ids=None):
+        return [
+            (
+                "provincia_02",
+                "Buenos Aires",
+                "province",
+                "IGN",
+                "02",
+                None,
+                geometry,
+                bar_center,
+                bar_geometry,
+            )
+        ]
+
+    monkeypatch.setattr(api_main, "fetch_territories_with_geometry", fake_fetch_territories_with_geometry)
+
+    response = client.get("/territories", params={"level": "province"})
+
+    assert response.status_code == 200
+    assert response.json()["features"][0]["geometry"] == geometry
+    assert response.json()["features"][0]["properties"]["bar_center"] == bar_center
+    assert response.json()["features"][0]["properties"]["bar_geometry"] == bar_geometry
 
 
 def test_map_data_rejects_unknown_level():

@@ -74,10 +74,22 @@ def list_territories(
                     "source": source,
                     "external_id": external_id,
                     "parent_id": parent_territory_id,
+                    "bar_center": bar_center,
+                    "bar_geometry": bar_geometry,
                 },
                 "geometry": geometry,
             }
-            for territory_id, name, territory_level, source, external_id, parent_territory_id, geometry in rows
+            for (
+                territory_id,
+                name,
+                territory_level,
+                source,
+                external_id,
+                parent_territory_id,
+                geometry,
+                bar_center,
+                bar_geometry,
+            ) in rows
         ],
     }
 
@@ -155,6 +167,8 @@ def get_map_data(
                     "indicator": indicator,
                     "value": value,
                     "year": year,
+                    "bar_center": bar_center,
+                    "bar_geometry": bar_geometry,
                 },
                 "geometry": geometry,
             }
@@ -166,6 +180,8 @@ def get_map_data(
                 external_id,
                 parent_territory_id,
                 geometry,
+                bar_center,
+                bar_geometry,
                 value,
             ) in rows
         ],
