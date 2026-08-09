@@ -14,6 +14,9 @@ IGN_MUNICIPALITIES_URL = (
     "&outputFormat=application/json&srsName=EPSG:4326"
 )
 
+GEOREF_LOCAL_GOVERNMENTS_URL = "https://apis.datos.gob.ar/georef/api/v2.0/gobiernos-locales.geojson"
+GEOREF_SOURCE_NAME = "Georef API v2.0 gobiernos-locales"
+
 EXPECTED_PROVINCE_CODES = {
     "02",
     "06",
@@ -115,13 +118,134 @@ def sorted_counter_items(counter, name_key="value"):
 
 def get_features(data):
     if data.get("type") != "FeatureCollection":
-        raise ValueError("El archivo IGN debe ser un GeoJSON FeatureCollection.")
+        raise ValueError("El GeoJSON debe ser un FeatureCollection.")
 
     features = data.get("features")
     if not isinstance(features, list):
         raise ValueError("El GeoJSON no contiene una lista valida de features.")
 
     return features
+
+
+def georef_province_id(properties):
+    province = properties.get("provincia")
+
+    if isinstance(province, dict):
+        return as_text(province.get("id"))
+
+    return as_text(properties.get("provincia_id"))
+
+
+def georef_feature_summary(feature, georef_id=""):
+    properties = feature.get("properties") or {}
+
+    return {
+        "feature_id": feature.get("id"),
+        "id": georef_id or as_text(properties.get("id")),
+        "name": as_text(properties.get("nombre")) or as_text(properties.get("nombre_completo")),
+        "category": as_text(properties.get("categoria")),
+        "province_id": georef_province_id(properties),
+        "geometry_type": (feature.get("geometry") or {}).get("type"),
+    }
+
+
+def normalize_georef_local_governments(data, province_codes, source_url=GEOREF_LOCAL_GOVERNMENTS_URL):
+    target_codes = set(province_codes)
+    normalized_features = []
+    invalid_features = []
+    duplicate_ids = {}
+    seen_ids = {}
+    geometry_type_counts = {}
+    category_counts = {}
+
+    for feature in get_features(data):
+        properties = feature.get("properties") or {}
+        georef_id = as_text(properties.get("id"))
+        province_id = georef_province_id(properties) or georef_id[:2]
+
+        if province_id not in target_codes:
+            continue
+
+        summary = georef_feature_summary(feature, georef_id=georef_id)
+        geometry = feature.get("geometry")
+        geometry_type = (geometry or {}).get("type")
+        name = as_text(properties.get("nombre"))
+        full_name = as_text(properties.get("nombre_completo")) or name
+        category = as_text(properties.get("categoria")) or "Gobierno local"
+
+        if (
+            not MUNICIPALITY_CODE_PATTERN.fullmatch(georef_id)
+            or georef_id[:2] != province_id
+            or not name
+            or geometry_type not in {"Polygon", "MultiPolygon"}
+        ):
+            invalid_features.append(summary)
+            continue
+
+        if georef_id in seen_ids:
+            duplicate_ids.setdefault(georef_id, [seen_ids[georef_id]]).append(summary)
+            continue
+
+        seen_ids[georef_id] = summary
+        increment(geometry_type_counts, geometry_type)
+        increment(category_counts, category)
+
+        normalized_properties = dict(properties)
+        normalized_properties.update(
+            {
+                "in1": georef_id,
+                "cod_prov": province_id,
+                "nam": name,
+                "fna": full_name,
+                "gna": category,
+                "fdc": GEOREF_SOURCE_NAME,
+                "sag": source_url,
+                "source": GEOREF_SOURCE_NAME,
+            }
+        )
+
+        normalized_features.append(
+            {
+                "type": "Feature",
+                "id": f"georef.gobierno-local.{georef_id}",
+                "geometry": deepcopy(geometry),
+                "properties": normalized_properties,
+            }
+        )
+
+    if invalid_features or duplicate_ids:
+        raise ValueError(
+            "Georef supplement contains invalid local governments: "
+            + json.dumps(
+                {
+                    "invalid_features": invalid_features,
+                    "duplicate_ids": duplicate_ids,
+                },
+                ensure_ascii=True,
+            )
+        )
+
+    return normalized_features, {
+        "source": GEOREF_SOURCE_NAME,
+        "source_url": source_url,
+        "province_codes": sorted(target_codes),
+        "feature_count": len(normalized_features),
+        "geometry_type_counts": sorted_counter_items(geometry_type_counts),
+        "category_counts": sorted_counter_items(category_counts),
+    }
+
+
+def apply_georef_supplement(data, georef_data, province_codes, source_url=GEOREF_LOCAL_GOVERNMENTS_URL):
+    normalized_features, supplement_report = normalize_georef_local_governments(
+        georef_data,
+        province_codes,
+        source_url=source_url,
+    )
+
+    supplemented_data = deepcopy(data)
+    supplemented_data["features"].extend(normalized_features)
+
+    return supplemented_data, supplement_report
 
 
 def validate_and_normalize(data, source_url=IGN_MUNICIPALITIES_URL):
@@ -282,6 +406,9 @@ def prepare(
     raw_output_path=None,
     max_features=None,
     write_valid_only=False,
+    georef_supplement_input_path=None,
+    georef_supplement_url=GEOREF_LOCAL_GOVERNMENTS_URL,
+    georef_supplement_province_codes=None,
 ):
     if input_path:
         data = read_geojson(input_path)
@@ -293,7 +420,28 @@ def prepare(
         if raw_output_path:
             write_json(raw_output_path, data)
 
+    supplement_reports = []
+
+    if georef_supplement_province_codes:
+        if georef_supplement_input_path:
+            georef_data = read_geojson(georef_supplement_input_path)
+            georef_source_url = str(georef_supplement_input_path)
+        else:
+            georef_data = download_geojson(georef_supplement_url)
+            georef_source_url = georef_supplement_url
+
+        data, supplement_report = apply_georef_supplement(
+            data,
+            georef_data,
+            georef_supplement_province_codes,
+            source_url=georef_source_url,
+        )
+        supplement_reports.append(supplement_report)
+
     normalized_data, report = validate_and_normalize(data, source_url=source_url)
+
+    if supplement_reports:
+        report["supplements"] = supplement_reports
 
     if report["has_blockers"]:
         if write_valid_only:
@@ -342,11 +490,36 @@ def parse_args():
         action="store_true",
         help="Write an exploratory output with only valid unique municipality features when blockers exist.",
     )
+    parser.add_argument(
+        "--georef-santiago",
+        action="store_true",
+        help="Supplement Santiago del Estero polygons from Georef gobiernos-locales.",
+    )
+    parser.add_argument(
+        "--georef-supplement-province-code",
+        action="append",
+        default=[],
+        help="Supplement local-government polygons from Georef for this two-digit province code.",
+    )
+    parser.add_argument(
+        "--georef-supplement-input",
+        help="Existing Georef gobiernos-locales GeoJSON to use instead of downloading it.",
+    )
+    parser.add_argument(
+        "--georef-supplement-url",
+        default=GEOREF_LOCAL_GOVERNMENTS_URL,
+        help="Georef gobiernos-locales GeoJSON URL used for supplements.",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    georef_supplement_province_codes = list(args.georef_supplement_province_code)
+
+    if args.georef_santiago and "86" not in georef_supplement_province_codes:
+        georef_supplement_province_codes.append("86")
+
     return prepare(
         input_path=args.input,
         output_path=args.output,
@@ -355,6 +528,9 @@ def main():
         raw_output_path=args.raw_output,
         max_features=args.max_features,
         write_valid_only=args.write_valid_only,
+        georef_supplement_input_path=args.georef_supplement_input,
+        georef_supplement_url=args.georef_supplement_url,
+        georef_supplement_province_codes=georef_supplement_province_codes,
     )
 
 

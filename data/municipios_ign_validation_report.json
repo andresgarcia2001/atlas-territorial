@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-08-09T20:03:17Z",
+  "generated_at": "2026-08-09T20:59:08Z",
   "source_url": "https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetFeature&typeName=ign:municipio&outputFormat=application/json&srsName=EPSG:4326",
   "source_layer": "ign:municipio",
   "output_policy": "The normalized GeoJSON is written only when has_blockers is false.",
-  "feature_count": 2114,
-  "valid_in1_count": 2106,
+  "feature_count": 2279,
+  "valid_in1_count": 2271,
   "has_blockers": true,
   "blocking_issues": [
     {
@@ -108,22 +108,24 @@
       }
     }
   ],
-  "warnings": [
-    {
-      "type": "missing_expected_province_codes",
-      "codes": [
-        "86"
-      ]
-    }
-  ],
+  "warnings": [],
   "observed_fields": [
+    "categoria",
+    "centroide",
+    "cod_prov",
     "fdc",
     "fna",
+    "fuente",
     "gid",
     "gna",
+    "id",
     "in1",
     "nam",
-    "sag"
+    "nombre",
+    "nombre_completo",
+    "provincia",
+    "sag",
+    "source"
   ],
   "province_counts": [
     {
@@ -211,6 +213,10 @@
       "count": 364
     },
     {
+      "cod_prov": "86",
+      "count": 165
+    },
+    {
       "cod_prov": "90",
       "count": 112
     },
@@ -233,6 +239,10 @@
       "count": 128
     },
     {
+      "value": "Comisi\u00f3n Municipal",
+      "count": 138
+    },
+    {
       "value": "Comuna",
       "count": 605
     },
@@ -250,19 +260,53 @@
     },
     {
       "value": "Municipio",
-      "count": 1193
+      "count": 1220
     }
   ],
   "geometry_type_counts": [
     {
       "value": "MultiPolygon",
-      "count": 2114
+      "count": 2115
+    },
+    {
+      "value": "Polygon",
+      "count": 164
+    }
+  ],
+  "supplements": [
+    {
+      "source": "Georef API v2.0 gobiernos-locales",
+      "source_url": "https://apis.datos.gob.ar/georef/api/v2.0/gobiernos-locales.geojson",
+      "province_codes": [
+        "86"
+      ],
+      "feature_count": 165,
+      "geometry_type_counts": [
+        {
+          "value": "MultiPolygon",
+          "count": 1
+        },
+        {
+          "value": "Polygon",
+          "count": 164
+        }
+      ],
+      "category_counts": [
+        {
+          "value": "Comisi\u00f3n Municipal",
+          "count": 138
+        },
+        {
+          "value": "Municipio",
+          "count": 27
+        }
+      ]
     }
   ],
   "filtered_output": {
     "enabled": true,
     "policy": "Exploratory output only: skipped invalid, unknown-province, and duplicate municipality codes.",
-    "feature_count": 2104,
+    "feature_count": 2269,
     "skipped_counts": {
       "missing_in1": 8,
       "invalid_in1": 0,

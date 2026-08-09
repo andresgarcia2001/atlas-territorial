@@ -107,6 +107,35 @@ It is useful as a cross-check because it exposes province fields missing from
   - `fdc`
   - `sag`
 
+## Georef local-government supplement
+
+Georef is used as an explicit supplement only for province prefixes that are
+missing from `ign:municipio`.
+
+Use the full download endpoint, not the search endpoint:
+
+- Polygon source:
+  `https://apis.datos.gob.ar/georef/api/v2.0/gobiernos-locales.geojson`
+- Search endpoints such as
+  `https://apis.datos.gob.ar/georef/api/v2.0/gobiernos-locales?provincia=86&formato=geojson`
+  return point geometries and must not be used as map polygons.
+
+Observed on 2026-08-09 from the full Georef local-government download:
+
+- Total features: `2280`.
+- Santiago del Estero (`86`) features: `165`.
+- Santiago geometry types: `164` `Polygon`, `1` `MultiPolygon`.
+- Fields used for normalization:
+  - `id` -> `in1`
+  - `provincia.id` -> `cod_prov`
+  - `nombre` -> `nam`
+  - `nombre_completo` -> `fna`
+  - `categoria` -> `gna`
+
+The preparer rejects Georef supplement rows unless they have a six-digit id,
+the id prefix matches the selected province code, a name is present, and the
+geometry is `Polygon` or `MultiPolygon`.
+
 ## Canonical identifiers
 
 ### Province IDs
@@ -225,13 +254,17 @@ Implemented in `scripts/prepare_ign_municipalities.py`:
 - Treats missing/invalid/duplicate `in1` and unknown province codes as blocking
   issues.
 - Reports missing expected province prefixes as warnings.
+- Can supplement Santiago del Estero polygons from Georef
+  `gobiernos-locales.geojson` with `--georef-santiago`.
 
 Remaining before loading the full IGN municipality polygons:
 
 1. Resolve the inspected `ign:municipio` source issues: eight rows with missing
    `in1` and duplicate codes `220476` and `822784`.
-2. Download or normalize the full `ign:municipio` GeoJSON into
+2. Use `--georef-santiago` while the IGN municipality layer has no `86`
+   polygons.
+3. Download or normalize the full `ign:municipio` GeoJSON into
    `data/municipios_ign_<YYYY-MM-DD>.geojson`.
-3. When the report has no blockers, either keep the generated default
+4. When the report has no blockers, either keep the generated default
    `data/municipios_ign.geojson` for the loader or copy it to a dated filename
    and set `IGN_MUNICIPALITIES_GEOJSON`.

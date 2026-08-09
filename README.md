@@ -87,9 +87,15 @@ docker compose exec backend alembic -c alembic.ini upgrade head
 Backend:
 
 ```powershell
-python -m pip install -r backend/requirements-dev.txt
-python -m pytest
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest
 ```
+
+El directorio `.venv/` es local y no se versiona. Reutilizarlo en corridas
+posteriores; no hace falta recrearlo salvo que cambien dependencias o version de
+Python. Si `py` no esta disponible, reemplazar `py -3.12` por el ejecutable de
+Python 3.12 instalado.
 
 El test de migraciones crea una base temporal y requiere una PostGIS accesible. Usa
 por defecto `localhost:5432` con usuario y password `territorio`; se puede ajustar
@@ -115,6 +121,17 @@ Ese comando descarga `ign:municipio` desde el WFS del IGN, deriva `cod_prov`
 desde `in1`, escribe `data/municipios_ign_validation_report.json` y solo genera
 `data/municipios_ign.geojson` si no hay bloqueantes. Si el reporte marca
 `has_blockers: true`, resolver esos casos antes de cargar municipios.
+
+Mientras `ign:municipio` no incluya poligonos para Santiago del Estero, se puede
+sumar el suplemento oficial de Georef:
+
+```powershell
+python scripts/prepare_ign_municipalities.py --georef-santiago
+```
+
+El suplemento usa la descarga completa de `gobiernos-locales.geojson`, toma solo
+features de provincia `86` y rechaza geometria que no sea `Polygon` o
+`MultiPolygon`.
 
 El loader principal es:
 
