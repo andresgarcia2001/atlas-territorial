@@ -379,6 +379,51 @@ def test_refresh_map_data_materialized_view_executes_refresh():
     assert cur.queries == ["REFRESH MATERIALIZED VIEW CONCURRENTLY territory_indicator_map_data_mv;"]
 
 
+def test_delete_stale_territories_removes_old_source_ids():
+    class FakeCursor:
+        def __init__(self):
+            self.queries = []
+            self.params = []
+
+        def execute(self, query, params=None):
+            self.queries.append(query)
+            self.params.append(params)
+
+        def fetchall(self):
+            return [("provincia_17",)]
+
+    config = load_territories.DatasetConfig(
+        name="provinces_test",
+        level="province",
+        source="fixture",
+        path_env="TEST_PROVINCES_GEOJSON",
+        default_path="unused.geojson",
+        id_prefix="provincia",
+        id_property_env="TEST_PROVINCE_ID_PROPERTY",
+        id_property_candidates=("cod_prov",),
+        name_property_env="TEST_PROVINCE_NAME_PROPERTY",
+        name_property_candidates=("nam",),
+        delete_stale_by_source=True,
+    )
+    cur = FakeCursor()
+    known_territory_ids = {"provincia_06", "provincia_17"}
+
+    deleted_count = load_territories.delete_stale_territories(
+        cur,
+        config,
+        {"provincia_06"},
+        known_territory_ids,
+    )
+
+    assert deleted_count == 1
+    assert "DELETE FROM indicators" in cur.queries[1]
+    assert "DELETE FROM territories" in cur.queries[2]
+    assert cur.params[0] == ("province", "fixture", ["provincia_06"])
+    assert cur.params[1] == (["provincia_17"],)
+    assert cur.params[2] == (["provincia_17"],)
+    assert known_territory_ids == {"provincia_06"}
+
+
 def test_main_refreshes_map_data_materialized_view_after_loading(monkeypatch):
     events = []
 
@@ -392,6 +437,7 @@ def test_main_refreshes_map_data_materialized_view_after_loading(monkeypatch):
     class FakeConnection:
         def __init__(self):
             self.cur = FakeCursor()
+            self.autocommit = False
 
         def __enter__(self):
             return self
@@ -403,7 +449,14 @@ def test_main_refreshes_map_data_materialized_view_after_loading(monkeypatch):
             return self.cur
 
     monkeypatch.setattr(load_territories, "DATASETS", ("dataset",))
-    monkeypatch.setattr(load_territories, "get_connection", lambda: FakeConnection())
+    connections = []
+
+    def fake_get_connection():
+        connection = FakeConnection()
+        connections.append(connection)
+        return connection
+
+    monkeypatch.setattr(load_territories, "get_connection", fake_get_connection)
     monkeypatch.setattr(load_territories, "fetch_existing_territory_ids", lambda cur: set())
     monkeypatch.setattr(load_territories, "load_dataset", lambda cur, config, known_ids: events.append("load") or 1)
     monkeypatch.setattr(load_territories, "refresh_map_data_materialized_view", lambda cur: events.append("refresh"))
@@ -411,3 +464,6 @@ def test_main_refreshes_map_data_materialized_view_after_loading(monkeypatch):
     load_territories.main()
 
     assert events == ["load", "refresh"]
+    assert len(connections) == 2
+    assert not connections[0].autocommit
+    assert connections[1].autocommit

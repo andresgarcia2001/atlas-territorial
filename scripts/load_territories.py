@@ -86,6 +86,7 @@ class DatasetConfig:
     indicators: dict[str, str] | None = None
     required_by_default: bool = False
     source_env: str | None = None
+    delete_stale_by_source: bool = False
 
 
 DATASETS = (
@@ -110,6 +111,7 @@ DATASETS = (
             "otro_x": "oxtvp",
         },
         required_by_default=True,
+        delete_stale_by_source=True,
     ),
     DatasetConfig(
         name="ign_municipalities",
@@ -463,6 +465,39 @@ def fetch_existing_territory_ids(cur):
     return {row[0] for row in cur.fetchall()}
 
 
+def delete_stale_territories(cur, config, loaded_territory_ids, known_territory_ids):
+    if not config.delete_stale_by_source or not loaded_territory_ids:
+        return 0
+
+    loaded_ids = sorted(loaded_territory_ids)
+    cur.execute(
+        """
+        SELECT territories.id
+        FROM territories
+        WHERE territories.level_id = %s
+          AND territories.source = %s
+          AND NOT (territories.id = ANY(%s::text[]))
+          AND NOT EXISTS (
+            SELECT 1
+            FROM territories children
+            WHERE children.parent_id = territories.id
+          );
+        """,
+        (config.level, config.source, loaded_ids),
+    )
+    stale_ids = [row[0] for row in cur.fetchall()]
+
+    if not stale_ids:
+        return 0
+
+    cur.execute("DELETE FROM indicators WHERE territory_id = ANY(%s::text[]);", (stale_ids,))
+    cur.execute("DELETE FROM territories WHERE id = ANY(%s::text[]);", (stale_ids,))
+    known_territory_ids.difference_update(stale_ids)
+    print(f"Deleted {len(stale_ids)} stale {config.name} territories from {config.source}")
+
+    return len(stale_ids)
+
+
 def derive_percentage_indicator(cur, level, numerator_indicator, derived_indicator):
     cur.execute(
         """
@@ -574,6 +609,7 @@ def load_dataset(cur, config, known_territory_ids):
     validate_dataset(config, features, id_property, name_property)
 
     missing_parent_count = 0
+    loaded_territory_ids = set()
 
     for feature in features:
         properties = get_feature_properties(feature)
@@ -613,6 +649,9 @@ def load_dataset(cur, config, known_territory_ids):
                 upsert_indicator(cur, territory_id, indicator_name, indicator_value, config.source)
 
         known_territory_ids.add(territory_id)
+        loaded_territory_ids.add(territory_id)
+
+    delete_stale_territories(cur, config, loaded_territory_ids, known_territory_ids)
 
     if config.indicators:
         derive_indicators(cur, config.level)
@@ -632,6 +671,10 @@ def main():
             known_territory_ids = fetch_existing_territory_ids(cur)
             for config in DATASETS:
                 total_loaded += load_dataset(cur, config, known_territory_ids)
+
+    with get_connection() as conn:
+        conn.autocommit = True
+        with conn.cursor() as cur:
             refresh_map_data_materialized_view(cur)
 
     print(f"Loaded {total_loaded} territorial features")

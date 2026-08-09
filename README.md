@@ -170,6 +170,8 @@ municipios huerfanos.
 View con una fila por territorio. Esto evita repetir `ST_AsGeoJSON` en cada request
 del mapa sin duplicar la geometria por cada indicador. Los valores se resuelven con
 un `LEFT JOIN` contra `indicators`, la misma semantica que usa `/indicator-values`.
+La geometria se publica con precision reducida y simplificacion por nivel para que
+el endpoint siga siendo usable en el navegador.
 
 La vista puede quedar desactualizada si se insertan o actualizan territorios o
 indicadores manualmente. El loader ejecuta:

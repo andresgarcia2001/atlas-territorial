@@ -155,6 +155,8 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
 
                 from scripts import load_territories
 
+                conn.commit()
+                conn.autocommit = True
                 load_territories.refresh_map_data_materialized_view(cur)
 
                 cur.execute(
