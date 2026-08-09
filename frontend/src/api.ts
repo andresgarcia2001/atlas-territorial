@@ -1,6 +1,8 @@
 import type {
+  IndicatorValuesResponse,
   IndicatorResponse,
   MapData,
+  TerritoryData,
   TerritoryLevelId,
   TerritoryLevelsResponse,
   TerritoryOptionsResponse,
@@ -52,6 +54,59 @@ export async function fetchTerritoryOptions(level: TerritoryLevelId, parentId?: 
 
   const data = (await response.json()) as TerritoryOptionsResponse;
   return data.territories;
+}
+
+function buildTerritorySearchParams(
+  level: TerritoryLevelId,
+  territoryIds: string[] = [],
+  parentId?: string | null,
+) {
+  const searchParams = new URLSearchParams({ level });
+
+  if (parentId) {
+    searchParams.set("parent_id", parentId);
+  }
+
+  for (const territoryId of territoryIds) {
+    searchParams.append("territory_ids", territoryId);
+  }
+
+  return searchParams;
+}
+
+export async function fetchTerritories(
+  level: TerritoryLevelId,
+  territoryIds: string[] = [],
+  parentId?: string | null,
+) {
+  const searchParams = buildTerritorySearchParams(level, territoryIds, parentId);
+  const response = await fetch(`${API_URL}/territories?${searchParams.toString()}`);
+
+  if (!response.ok) {
+    throw new Error("No se pudieron cargar las geometrías territoriales.");
+  }
+
+  return (await response.json()) as TerritoryData;
+}
+
+export async function fetchIndicatorValues(
+  indicator: string,
+  year: number,
+  level: TerritoryLevelId,
+  territoryIds: string[] = [],
+  parentId?: string | null,
+) {
+  const searchParams = buildTerritorySearchParams(level, territoryIds, parentId);
+  searchParams.set("indicator", indicator);
+  searchParams.set("year", year.toString());
+
+  const response = await fetch(`${API_URL}/indicator-values?${searchParams.toString()}`);
+
+  if (!response.ok) {
+    throw new Error("No se pudieron cargar los valores del indicador.");
+  }
+
+  return (await response.json()) as IndicatorValuesResponse;
 }
 
 export async function fetchMapData(

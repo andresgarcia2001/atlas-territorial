@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchMapData, fetchTerritoryOptions } from "./api";
+import { fetchIndicatorValues, fetchMapData, fetchTerritories, fetchTerritoryOptions } from "./api";
 
 
 function mockJsonResponse(body: unknown) {
@@ -60,5 +60,41 @@ describe("api", () => {
     expect(requestedUrl.pathname).toBe("/territory-options");
     expect(requestedUrl.searchParams.get("level")).toBe("census_radius");
     expect(requestedUrl.searchParams.get("parent_id")).toBe("municipio_001");
+  });
+
+  it("builds territory geometry requests with repeated territory ids", async () => {
+    const fetchMock = vi.fn<typeof fetch>(() => mockJsonResponse({ type: "FeatureCollection", features: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchTerritories("municipality", ["municipio_001", "municipio_002"], "provincia_02");
+
+    const requestedUrl = getRequestedUrl(fetchMock);
+    expect(requestedUrl.pathname).toBe("/territories");
+    expect(requestedUrl.searchParams.get("level")).toBe("municipality");
+    expect(requestedUrl.searchParams.get("parent_id")).toBe("provincia_02");
+    expect(requestedUrl.searchParams.getAll("territory_ids")).toEqual(["municipio_001", "municipio_002"]);
+  });
+
+  it("builds indicator value requests with level, year and repeated territory ids", async () => {
+    const fetchMock = vi.fn<typeof fetch>(() =>
+      mockJsonResponse({ indicator: "poblacion_total", year: 2022, level: "municipality", values: [] }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchIndicatorValues(
+      "poblacion_total",
+      2022,
+      "municipality",
+      ["municipio_001", "municipio_002"],
+      "provincia_02",
+    );
+
+    const requestedUrl = getRequestedUrl(fetchMock);
+    expect(requestedUrl.pathname).toBe("/indicator-values");
+    expect(requestedUrl.searchParams.get("indicator")).toBe("poblacion_total");
+    expect(requestedUrl.searchParams.get("year")).toBe("2022");
+    expect(requestedUrl.searchParams.get("level")).toBe("municipality");
+    expect(requestedUrl.searchParams.get("parent_id")).toBe("provincia_02");
+    expect(requestedUrl.searchParams.getAll("territory_ids")).toEqual(["municipio_001", "municipio_002"]);
   });
 });

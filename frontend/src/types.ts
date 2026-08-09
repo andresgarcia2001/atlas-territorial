@@ -30,13 +30,39 @@ export type MultiPolygonGeometry = {
   coordinates: number[][][][];
 };
 
-export type MapProperties = {
+export type TerritoryProperties = {
   id: string;
   name: string;
   level: TerritoryLevelId;
   source: string;
   external_id: string;
   parent_id: string | null;
+};
+
+export type TerritoryFeature = {
+  type: "Feature";
+  properties: TerritoryProperties;
+  geometry: MultiPolygonGeometry;
+};
+
+export type TerritoryData = {
+  type: "FeatureCollection";
+  features: TerritoryFeature[];
+};
+
+export type IndicatorValue = {
+  territory_id: string;
+  value: number | null;
+};
+
+export type IndicatorValuesResponse = {
+  indicator: string;
+  year: number;
+  level: TerritoryLevelId;
+  values: IndicatorValue[];
+};
+
+export type MapProperties = TerritoryProperties & {
   indicator: string;
   value: number | null;
   year: number;

@@ -58,3 +58,25 @@ def test_fetch_map_data_uses_left_join_for_missing_indicator_values(monkeypatch)
         ["provincia_02"],
         ["provincia_02"],
     )
+
+
+def test_fetch_territories_with_geometry_reads_cached_map_geometry(monkeypatch):
+    cursor = FakeCursor()
+    monkeypatch.setattr(repositories, "get_connection", lambda: FakeConnection(cursor))
+
+    rows = repositories.fetch_territories_with_geometry(
+        "municipality",
+        parent_id="provincia_02",
+        territory_ids=["municipio_001"],
+    )
+
+    assert rows == []
+    assert "FROM territory_indicator_map_data_mv mv" in cursor.executed_query
+    assert "ST_AsGeoJSON(geom)" not in cursor.executed_query
+    assert cursor.executed_params == (
+        "municipality",
+        "provincia_02",
+        "provincia_02",
+        ["municipio_001"],
+        ["municipio_001"],
+    )

@@ -2,9 +2,17 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { fetchMapData } from "../api";
+import { fetchIndicatorValues, fetchTerritories } from "../api";
 import { getIndicatorLabel } from "../indicatorCatalog";
-import type { ColorMode, LayerSettings, MapData, MapFeature, ViewMode } from "../types";
+import type {
+  ColorMode,
+  IndicatorValue,
+  LayerSettings,
+  MapData,
+  MapFeature,
+  TerritoryData,
+  ViewMode,
+} from "../types";
 
 type MapViewProps = LayerSettings & {
   onDataError?: (message: string | null) => void;
@@ -13,12 +21,22 @@ type MapViewProps = LayerSettings & {
 
 type StyleExpression = unknown[];
 
-type LoadedMapData = {
-  data: MapData;
+type LoadedTerritoryData = {
+  data: TerritoryData;
+  territoryKey: string;
+  territoryLevel: string;
+};
+
+type LoadedIndicatorValues = {
+  valueByTerritoryId: Map<string, number | null>;
   indicator: string;
   territoryKey: string;
   territoryLevel: string;
   year: number;
+};
+
+type LoadedMapData = LoadedIndicatorValues & {
+  data: MapData;
 };
 
 type LegendState =
@@ -132,13 +150,25 @@ function getTerritoryColor(territoryId: string) {
   return TERRITORY_COLORS[hash % TERRITORY_COLORS.length];
 }
 
-function withTerritoryColors(data: MapData): MapData {
+function getValueByTerritoryId(values: IndicatorValue[]) {
+  return new Map(values.map((indicatorValue) => [indicatorValue.territory_id, indicatorValue.value]));
+}
+
+function composeMapData(
+  territoryData: TerritoryData,
+  valueByTerritoryId: Map<string, number | null>,
+  indicator: string,
+  year: number,
+): MapData {
   return {
-    ...data,
-    features: data.features.map((feature) => ({
+    ...territoryData,
+    features: territoryData.features.map((feature) => ({
       ...feature,
       properties: {
         ...feature.properties,
+        indicator,
+        value: valueByTerritoryId.get(feature.properties.id) ?? null,
+        year,
         territory_color: getTerritoryColor(feature.properties.id),
       },
     })),
@@ -362,13 +392,46 @@ function renderTerritoryData(
 export function MapView({ colorMode, indicator, onDataError, territoryIds, territoryLevel, viewMode, year }: MapViewProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const loadedDataRef = useRef<LoadedMapData | null>(null);
+  const loadedTerritoryDataRef = useRef<LoadedTerritoryData | null>(null);
+  const loadedIndicatorValuesRef = useRef<LoadedIndicatorValues | null>(null);
+  const renderedDataRef = useRef<LoadedMapData | null>(null);
   const latestLayerSettingsRef = useRef<LayerSettings>({ colorMode, indicator, territoryIds, territoryLevel, viewMode });
   const lastFitKeyRef = useRef<string | null>(null);
   const [legend, setLegend] = useState<LegendState | null>(null);
   const territoryKey = useMemo(() => getTerritoryFilterKey(territoryIds), [territoryIds]);
 
   latestLayerSettingsRef.current = { colorMode, indicator, territoryIds, territoryLevel, viewMode };
+
+  function renderCurrentData(map: maplibregl.Map, shouldFitMap: boolean) {
+    const territoryData = loadedTerritoryDataRef.current;
+    const indicatorValues = loadedIndicatorValuesRef.current;
+
+    if (
+      !territoryData ||
+      !indicatorValues ||
+      territoryData.territoryKey !== territoryKey ||
+      territoryData.territoryLevel !== territoryLevel ||
+      indicatorValues.indicator !== indicator ||
+      indicatorValues.territoryKey !== territoryKey ||
+      indicatorValues.territoryLevel !== territoryLevel ||
+      indicatorValues.year !== year
+    ) {
+      return false;
+    }
+
+    const layerSettings = latestLayerSettingsRef.current;
+    const data = composeMapData(territoryData.data, indicatorValues.valueByTerritoryId, indicator, year);
+
+    renderedDataRef.current = {
+      ...indicatorValues,
+      data,
+    };
+    renderTerritoryData(map, data, layerSettings, shouldFitMap);
+    setLegend(getLegend(data, layerSettings));
+    onDataError?.(null);
+
+    return true;
+  }
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -413,6 +476,57 @@ export function MapView({ colorMode, indicator, onDataError, territoryIds, terri
   useEffect(() => {
     const map = mapRef.current;
 
+    if (!map) {
+      return;
+    }
+
+    const mapInstance = map;
+    let isCancelled = false;
+
+    async function loadTerritoryGeometry() {
+      try {
+        const data = await fetchTerritories(territoryLevel, territoryIds);
+
+        if (isCancelled) {
+          return;
+        }
+
+        loadedTerritoryDataRef.current = { data, territoryKey, territoryLevel };
+
+        const applyData = () => {
+          const fitKey = `${territoryLevel}:${territoryKey}`;
+          const didRender = renderCurrentData(mapInstance, lastFitKeyRef.current !== fitKey);
+
+          if (didRender) {
+            lastFitKeyRef.current = fitKey;
+          }
+        };
+
+        if (mapInstance.loaded()) {
+          applyData();
+        } else {
+          mapInstance.once("load", applyData);
+        }
+      } catch (caughtError) {
+        if (!isCancelled) {
+          setLegend(null);
+          onDataError?.(
+            caughtError instanceof Error ? caughtError.message : "No se pudieron cargar las geometrías territoriales.",
+          );
+        }
+      }
+    }
+
+    loadTerritoryGeometry();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [onDataError, territoryIds, territoryKey, territoryLevel]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+
     if (!map || !indicator) {
       return;
     }
@@ -420,46 +534,47 @@ export function MapView({ colorMode, indicator, onDataError, territoryIds, terri
     const mapInstance = map;
     let isCancelled = false;
 
-    async function loadData() {
+    async function loadIndicatorValues() {
       try {
-        const data = withTerritoryColors(await fetchMapData(indicator, year, territoryLevel, territoryIds));
+        const data = await fetchIndicatorValues(indicator, year, territoryLevel, territoryIds);
 
         if (isCancelled) {
           return;
         }
 
-        const applyData = () => {
-          const fitKey = `${territoryLevel}:${territoryKey}`;
-          const shouldFitMap = lastFitKeyRef.current !== fitKey;
-          const layerSettings = latestLayerSettingsRef.current;
-
-          loadedDataRef.current = { data, indicator, territoryKey, territoryLevel, year };
-          renderTerritoryData(mapInstance, data, layerSettings, shouldFitMap);
-          setLegend(getLegend(data, layerSettings));
-          lastFitKeyRef.current = fitKey;
-          onDataError?.(null);
+        loadedIndicatorValuesRef.current = {
+          valueByTerritoryId: getValueByTerritoryId(data.values),
+          indicator,
+          territoryKey,
+          territoryLevel,
+          year,
         };
 
-        const safeApplyData = () => {
-          if (!isCancelled) {
-            applyData();
+        const applyData = () => {
+          const fitKey = `${territoryLevel}:${territoryKey}`;
+          const didRender = renderCurrentData(mapInstance, lastFitKeyRef.current !== fitKey);
+
+          if (didRender) {
+            lastFitKeyRef.current = fitKey;
           }
         };
 
         if (mapInstance.loaded()) {
-          safeApplyData();
+          applyData();
         } else {
-          mapInstance.once("load", safeApplyData);
+          mapInstance.once("load", applyData);
         }
       } catch (caughtError) {
         if (!isCancelled) {
           setLegend(null);
-          onDataError?.(caughtError instanceof Error ? caughtError.message : "No se pudieron cargar los datos.");
+          onDataError?.(
+            caughtError instanceof Error ? caughtError.message : "No se pudieron cargar los valores del indicador.",
+          );
         }
       }
     }
 
-    loadData();
+    loadIndicatorValues();
 
     return () => {
       isCancelled = true;
@@ -468,7 +583,7 @@ export function MapView({ colorMode, indicator, onDataError, territoryIds, terri
 
   useEffect(() => {
     const map = mapRef.current;
-    const loadedData = loadedDataRef.current;
+    const loadedData = renderedDataRef.current;
 
     if (
       !map ||

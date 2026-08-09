@@ -26,17 +26,17 @@ def fetch_territory_levels():
 def fetch_territories_with_geometry(level=DEFAULT_TERRITORY_LEVEL, parent_id=None, territory_ids=None):
     query = """
         SELECT
-          id,
-          name,
-          level_id,
-          source,
-          external_id,
-          parent_id,
-          ST_AsGeoJSON(geom)::json AS geometry
-        FROM territories
-        WHERE level_id = %s
-          AND (%s::text IS NULL OR parent_id = %s)
-          AND (%s::text[] IS NULL OR id = ANY(%s::text[]))
+          mv.id,
+          mv.name,
+          mv.level_id,
+          mv.source,
+          mv.external_id,
+          mv.parent_id,
+          mv.geometry
+        FROM territory_indicator_map_data_mv mv
+        WHERE mv.level_id = %s
+          AND (%s::text IS NULL OR mv.parent_id = %s)
+          AND (%s::text[] IS NULL OR mv.id = ANY(%s::text[]))
         ORDER BY name;
     """
 
