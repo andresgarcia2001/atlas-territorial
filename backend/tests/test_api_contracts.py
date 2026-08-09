@@ -92,3 +92,29 @@ def test_map_data_rejects_unknown_indicator(monkeypatch):
     )
 
     assert response.status_code == 422
+
+
+def test_map_data_allows_known_indicator_without_level_values(monkeypatch):
+    captured_args = {}
+
+    def fake_fetch_indicator_names(level, year):
+        if level == "municipality":
+            return []
+
+        return [("poblacion_total",)]
+
+    def fake_fetch_map_data(indicator, year, level, territory_ids=None, parent_id=None):
+        captured_args.update({"indicator": indicator, "year": year, "level": level})
+        return []
+
+    monkeypatch.setattr(api_main, "fetch_indicator_names", fake_fetch_indicator_names)
+    monkeypatch.setattr(api_main, "fetch_map_data", fake_fetch_map_data)
+
+    response = client.get(
+        "/map-data",
+        params={"indicator": "poblacion_total", "year": "2022", "level": "municipality"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["features"] == []
+    assert captured_args == {"indicator": "poblacion_total", "year": 2022, "level": "municipality"}

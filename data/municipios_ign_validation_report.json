@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-09T15:55:57Z",
+  "generated_at": "2026-08-09T20:03:17Z",
   "source_url": "https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetFeature&typeName=ign:municipio&outputFormat=application/json&srsName=EPSG:4326",
   "source_layer": "ign:municipio",
   "output_policy": "The normalized GeoJSON is written only when has_blockers is false.",
@@ -258,5 +258,16 @@
       "value": "MultiPolygon",
       "count": 2114
     }
-  ]
+  ],
+  "filtered_output": {
+    "enabled": true,
+    "policy": "Exploratory output only: skipped invalid, unknown-province, and duplicate municipality codes.",
+    "feature_count": 2104,
+    "skipped_counts": {
+      "missing_in1": 8,
+      "invalid_in1": 0,
+      "duplicate_in1": 2,
+      "unknown_province_code": 0
+    }
+  }
 }

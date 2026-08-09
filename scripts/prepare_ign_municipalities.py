@@ -238,7 +238,51 @@ def validate_and_normalize(data, source_url=IGN_MUNICIPALITIES_URL):
     return normalized_data, report
 
 
-def prepare(input_path, output_path, report_path, url=IGN_MUNICIPALITIES_URL, raw_output_path=None, max_features=None):
+def get_valid_unique_features(data):
+    filtered_features = []
+    skipped_counts = {
+        "missing_in1": 0,
+        "invalid_in1": 0,
+        "duplicate_in1": 0,
+        "unknown_province_code": 0,
+    }
+    seen_in1 = set()
+
+    for feature in get_features(data):
+        properties = feature.get("properties") or {}
+        in1 = as_text(properties.get("in1"))
+
+        if not in1:
+            skipped_counts["missing_in1"] += 1
+            continue
+
+        if not MUNICIPALITY_CODE_PATTERN.fullmatch(in1):
+            skipped_counts["invalid_in1"] += 1
+            continue
+
+        if in1[:2] not in EXPECTED_PROVINCE_CODES:
+            skipped_counts["unknown_province_code"] += 1
+            continue
+
+        if in1 in seen_in1:
+            skipped_counts["duplicate_in1"] += 1
+            continue
+
+        seen_in1.add(in1)
+        filtered_features.append(feature)
+
+    return filtered_features, skipped_counts
+
+
+def prepare(
+    input_path,
+    output_path,
+    report_path,
+    url=IGN_MUNICIPALITIES_URL,
+    raw_output_path=None,
+    max_features=None,
+    write_valid_only=False,
+):
     if input_path:
         data = read_geojson(input_path)
         source_url = str(input_path)
@@ -250,13 +294,29 @@ def prepare(input_path, output_path, report_path, url=IGN_MUNICIPALITIES_URL, ra
             write_json(raw_output_path, data)
 
     normalized_data, report = validate_and_normalize(data, source_url=source_url)
-    write_json(report_path, report)
 
     if report["has_blockers"]:
+        if write_valid_only:
+            valid_features, skipped_counts = get_valid_unique_features(normalized_data)
+            normalized_data["features"] = valid_features
+            report["filtered_output"] = {
+                "enabled": True,
+                "policy": "Exploratory output only: skipped invalid, unknown-province, and duplicate municipality codes.",
+                "feature_count": len(valid_features),
+                "skipped_counts": skipped_counts,
+            }
+            write_json(report_path, report)
+            write_json(output_path, normalized_data)
+            print(f"Filtered normalized GeoJSON written to {output_path}.")
+            print(f"Validation report written to {report_path}.")
+            return 0
+
+        write_json(report_path, report)
         print(f"Validation failed. Report written to {report_path}.")
         print("Normalized GeoJSON was not written because blocking issues remain.")
         return 2
 
+    write_json(report_path, report)
     write_json(output_path, normalized_data)
     print(f"Normalized GeoJSON written to {output_path}.")
     print(f"Validation report written to {report_path}.")
@@ -277,6 +337,11 @@ def parse_args():
     parser.add_argument("--url", default=IGN_MUNICIPALITIES_URL, help="IGN WFS GeoJSON URL.")
     parser.add_argument("--raw-output", help="Optional path to save the raw downloaded GeoJSON.")
     parser.add_argument("--max-features", type=int, help="Optional WFS maxFeatures value for smoke tests.")
+    parser.add_argument(
+        "--write-valid-only",
+        action="store_true",
+        help="Write an exploratory output with only valid unique municipality features when blockers exist.",
+    )
     return parser.parse_args()
 
 
@@ -289,6 +354,7 @@ def main():
         url=args.url,
         raw_output_path=args.raw_output,
         max_features=args.max_features,
+        write_valid_only=args.write_valid_only,
     )
 
 

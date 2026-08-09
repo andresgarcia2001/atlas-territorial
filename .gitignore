@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 .docker-cli/
 .env
+data/municipios_ign.geojson

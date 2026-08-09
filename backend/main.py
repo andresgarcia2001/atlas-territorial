@@ -113,11 +113,18 @@ def get_selected_territory_ids(territory_ids, province_ids):
 def validate_indicator(indicator: str, level: TerritoryLevelId, year: int):
     available_indicators = {row[0] for row in fetch_indicator_names(level, year)}
 
-    if indicator not in available_indicators:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Indicador no disponible para level={level!r} y year={year}: {indicator!r}.",
-        )
+    if indicator in available_indicators:
+        return
+
+    known_indicators = {row[0] for row in fetch_indicator_names(None, year)}
+
+    if indicator in known_indicators:
+        return
+
+    raise HTTPException(
+        status_code=422,
+        detail=f"Indicador no disponible para level={level!r} y year={year}: {indicator!r}.",
+    )
 
 
 @app.get("/map-data")

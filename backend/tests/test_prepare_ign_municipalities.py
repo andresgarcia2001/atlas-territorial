@@ -124,6 +124,81 @@ def test_prepare_writes_report_but_not_output_when_blocked(tmp_path):
     assert not output_path.exists()
 
 
+def test_prepare_can_write_valid_only_output_when_blocked(tmp_path):
+    input_path = tmp_path / "raw.geojson"
+    output_path = tmp_path / "municipios_ign.geojson"
+    report_path = tmp_path / "report.json"
+    input_path.write_text(
+        """
+        {
+          "type": "FeatureCollection",
+          "features": [
+            {
+              "type": "Feature",
+              "id": "municipio.1",
+              "geometry": {
+                "type": "MultiPolygon",
+                "coordinates": [[[[0, 0], [1, 0], [1, 1], [0, 0]]]]
+              },
+              "properties": {
+                "gid": 1,
+                "gna": "Municipio",
+                "nam": "San Antonio de Areco",
+                "in1": "060735"
+              }
+            },
+            {
+              "type": "Feature",
+              "id": "municipio.2",
+              "geometry": {
+                "type": "MultiPolygon",
+                "coordinates": [[[[0, 0], [1, 0], [1, 1], [0, 0]]]]
+              },
+              "properties": {
+                "gid": 2,
+                "gna": "Municipio",
+                "nam": "Duplicado",
+                "in1": "060735"
+              }
+            },
+            {
+              "type": "Feature",
+              "id": "municipio.3",
+              "geometry": {
+                "type": "MultiPolygon",
+                "coordinates": [[[[0, 0], [1, 0], [1, 1], [0, 0]]]]
+              },
+              "properties": {
+                "gid": 3,
+                "gna": "Municipio",
+                "nam": "Sin Codigo",
+                "in1": ""
+              }
+            }
+          ]
+        }
+        """,
+        encoding="utf-8",
+    )
+
+    exit_code = prepare_ign_municipalities.prepare(
+        input_path=Path(input_path),
+        output_path=Path(output_path),
+        report_path=Path(report_path),
+        write_valid_only=True,
+    )
+
+    report = prepare_ign_municipalities.read_geojson(report_path)
+    output = prepare_ign_municipalities.read_geojson(output_path)
+
+    assert exit_code == 0
+    assert report["has_blockers"] is True
+    assert report["filtered_output"]["feature_count"] == 1
+    assert report["filtered_output"]["skipped_counts"]["duplicate_in1"] == 1
+    assert report["filtered_output"]["skipped_counts"]["missing_in1"] == 1
+    assert [feature["id"] for feature in output["features"]] == ["municipio.1"]
+
+
 def test_prepare_writes_normalized_output_when_clean(tmp_path):
     input_path = tmp_path / "raw.geojson"
     output_path = tmp_path / "municipios_ign.geojson"
