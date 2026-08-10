@@ -50,7 +50,13 @@ describe("territoryMetadata", () => {
     expect(
       areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
         ...DEFAULT_LAYER_SETTINGS,
-        transportOverlay: "ba_bus_routes",
+        territoryLayerMode: "visible",
+      }),
+    ).toBe(false);
+    expect(
+      areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
+        ...DEFAULT_LAYER_SETTINGS,
+        transportOverlay: "none",
       }),
     ).toBe(false);
     expect(

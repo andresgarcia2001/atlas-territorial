@@ -14,7 +14,8 @@ export const DEFAULT_LAYER_SETTINGS: LayerSettings = {
   colorMode: "indicator",
   viewMode: "flat",
   geometryMode: "surface",
-  transportOverlay: "none",
+  territoryLayerMode: "hidden",
+  transportOverlay: "ba_bus_routes",
   territoryLevel: DEFAULT_TERRITORY_LEVEL,
   territoryIds: [],
 };
@@ -29,6 +30,7 @@ export function areLayerSettingsEqual(first: LayerSettings, second: LayerSetting
     first.colorMode === second.colorMode &&
     first.viewMode === second.viewMode &&
     first.geometryMode === second.geometryMode &&
+    first.territoryLayerMode === second.territoryLayerMode &&
     first.transportOverlay === second.transportOverlay &&
     first.territoryLevel === second.territoryLevel &&
     areArraysEqual(first.territoryIds, second.territoryIds)

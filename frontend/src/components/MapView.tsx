@@ -285,7 +285,11 @@ function getFillOpacity(colorMode: ColorMode) {
   return colorMode === "territory" ? 0.58 : 0.5;
 }
 
-function getLegend(data: MapData, layerSettings: LayerSettings): LegendState {
+function getLegend(data: MapData, layerSettings: LayerSettings): LegendState | null {
+  if (layerSettings.territoryLayerMode === "hidden") {
+    return null;
+  }
+
   if (layerSettings.colorMode === "territory") {
     return {
       colorMode: "territory",
@@ -351,6 +355,26 @@ function fitMapToData(map: maplibregl.Map, data: MapData) {
   }
 }
 
+function fitMapToTransportRoutes(map: maplibregl.Map, data: TransportRouteData) {
+  if (data.features.length === 0) {
+    return;
+  }
+
+  const bounds = new maplibregl.LngLatBounds();
+
+  for (const feature of data.features) {
+    for (const line of feature.geometry.coordinates) {
+      for (const position of line) {
+        bounds.extend([position[0], position[1]]);
+      }
+    }
+  }
+
+  if (!bounds.isEmpty()) {
+    map.fitBounds(bounds, { padding: 72, duration: 450 });
+  }
+}
+
 function updateTerritoryPaint(
   map: maplibregl.Map,
   data: MapData,
@@ -390,6 +414,7 @@ function applyViewMode(
   viewMode: ViewMode,
   geometryMode: GeometryMode,
   hasAvailableBarGeometry: boolean,
+  isTerritoryLayerVisible: boolean,
 ) {
   if (
     !map.getLayer("territories-fill") ||
@@ -399,6 +424,20 @@ function applyViewMode(
     !map.getLayer("territory-bars-extrusion") ||
     !map.getLayer("territory-bars-outline")
   ) {
+    return;
+  }
+
+  if (!isTerritoryLayerVisible) {
+    for (const layerId of [
+      "territories-fill",
+      "territories-outline",
+      "territories-extrusion",
+      "territory-bars-fill",
+      "territory-bars-extrusion",
+      "territory-bars-outline",
+    ]) {
+      map.setLayoutProperty(layerId, "visibility", "none");
+    }
     return;
   }
 
@@ -628,7 +667,12 @@ function addTransportRouteLayers(map: maplibregl.Map, data: TransportRouteData) 
   }
 }
 
-function renderTransportRouteData(map: maplibregl.Map, data: TransportRouteData, isVisible: boolean) {
+function renderTransportRouteData(
+  map: maplibregl.Map,
+  data: TransportRouteData,
+  isVisible: boolean,
+  shouldFitMap: boolean,
+) {
   const source = map.getSource(TRANSPORT_ROUTES_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
 
   if (source) {
@@ -639,6 +683,10 @@ function renderTransportRouteData(map: maplibregl.Map, data: TransportRouteData,
 
   setTransportRouteVisibility(map, isVisible);
   moveTransportRouteLayersToTop(map);
+
+  if (isVisible && shouldFitMap) {
+    fitMapToTransportRoutes(map, data);
+  }
 }
 
 function renderTerritoryData(
@@ -664,7 +712,13 @@ function renderTerritoryData(
     fitMapToData(map, loadedData);
   }
 
-  applyViewMode(map, layerSettings.viewMode, layerSettings.geometryMode, hasBarGeometry(loadedData));
+  applyViewMode(
+    map,
+    layerSettings.viewMode,
+    layerSettings.geometryMode,
+    hasBarGeometry(loadedData),
+    layerSettings.territoryLayerMode === "visible",
+  );
   moveTransportRouteLayersToTop(map);
 }
 
@@ -673,6 +727,7 @@ export function MapView({
   geometryMode,
   indicator,
   onDataError,
+  territoryLayerMode,
   transportOverlay,
   territoryIds,
   territoryLevel,
@@ -688,6 +743,7 @@ export function MapView({
     colorMode,
     geometryMode,
     indicator,
+    territoryLayerMode,
     transportOverlay,
     territoryIds,
     territoryLevel,
@@ -701,6 +757,7 @@ export function MapView({
     colorMode,
     geometryMode,
     indicator,
+    territoryLayerMode,
     transportOverlay,
     territoryIds,
     territoryLevel,
@@ -912,7 +969,7 @@ export function MapView({
         }
 
         const applyData = () => {
-          renderTransportRouteData(mapInstance, data, true);
+          renderTransportRouteData(mapInstance, data, true, true);
         };
 
         if (mapInstance.loaded()) {
@@ -955,6 +1012,7 @@ export function MapView({
       colorMode,
       geometryMode,
       indicator,
+      territoryLayerMode,
       transportOverlay,
       territoryIds,
       territoryLevel,
@@ -962,7 +1020,18 @@ export function MapView({
     };
     renderTerritoryData(map, loadedData.data, layerSettings, false);
     setLegend(getLegend(loadedData.data, layerSettings));
-  }, [colorMode, geometryMode, indicator, territoryIds, territoryKey, territoryLevel, transportOverlay, viewMode, year]);
+  }, [
+    colorMode,
+    geometryMode,
+    indicator,
+    territoryIds,
+    territoryKey,
+    territoryLayerMode,
+    territoryLevel,
+    transportOverlay,
+    viewMode,
+    year,
+  ]);
 
   return (
     <main className="map-shell" aria-label="Mapa de indicadores territoriales">

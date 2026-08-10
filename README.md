@@ -280,6 +280,10 @@ originales en `metadata`, normaliza campos comunes como `linea`, `recorrido`,
 `sentido`, `desde` y `hasta`, y borra recorridos obsoletos de la misma fuente que
 ya no aparezcan en el archivo cargado.
 
+La UI abre por defecto en modo transporte: `Colectivos BA` activo y mapa
+territorial oculto. Si la tabla `transport_routes` esta vacia, se vera solo el
+mapa base hasta cargar el GeoJSON.
+
 ## Materialized View de mapa
 
 `/territories` y `/map-data` leen geometria desde `territory_indicator_map_data_mv`,

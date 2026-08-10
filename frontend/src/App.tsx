@@ -20,6 +20,7 @@ import type {
   TerritoryLevel,
   TerritoryLevelId,
   TerritoryOption,
+  TerritoryLayerMode,
   TransportOverlayMode,
   ViewMode,
 } from "./types";
@@ -39,6 +40,11 @@ const VIEW_MODE_LABELS: Record<ViewMode, string> = {
 const GEOMETRY_MODE_LABELS: Record<GeometryMode, string> = {
   surface: "Relieve",
   bars: "Barras",
+};
+
+const TERRITORY_LAYER_LABELS: Record<TerritoryLayerMode, string> = {
+  visible: "Visible",
+  hidden: "Oculto",
 };
 
 const TRANSPORT_OVERLAY_LABELS: Record<TransportOverlayMode, string> = {
@@ -364,7 +370,7 @@ export function App() {
               aria-pressed={draftLayer.transportOverlay === "none"}
               className={draftLayer.transportOverlay === "none" ? "segment is-active" : "segment"}
               type="button"
-              onClick={() => updateDraftLayer({ transportOverlay: "none" })}
+              onClick={() => updateDraftLayer({ territoryLayerMode: "visible", transportOverlay: "none" })}
             >
               Ninguno
             </button>
@@ -372,9 +378,34 @@ export function App() {
               aria-pressed={draftLayer.transportOverlay === "ba_bus_routes"}
               className={draftLayer.transportOverlay === "ba_bus_routes" ? "segment is-active" : "segment"}
               type="button"
-              onClick={() => updateDraftLayer({ transportOverlay: "ba_bus_routes" })}
+              onClick={() => updateDraftLayer({ territoryLayerMode: "hidden", transportOverlay: "ba_bus_routes" })}
             >
               Colectivos BA
+            </button>
+          </div>
+        </section>
+
+        <section className="control-block" aria-labelledby="territory-layer-heading">
+          <div className="control-title">
+            <label id="territory-layer-heading">Mapa territorial</label>
+            <span>{TERRITORY_LAYER_LABELS[draftLayer.territoryLayerMode]}</span>
+          </div>
+          <div className="segmented" role="group" aria-label="Mapa territorial">
+            <button
+              aria-pressed={draftLayer.territoryLayerMode === "visible"}
+              className={draftLayer.territoryLayerMode === "visible" ? "segment is-active" : "segment"}
+              type="button"
+              onClick={() => updateDraftLayer({ territoryLayerMode: "visible" })}
+            >
+              Visible
+            </button>
+            <button
+              aria-pressed={draftLayer.territoryLayerMode === "hidden"}
+              className={draftLayer.territoryLayerMode === "hidden" ? "segment is-active" : "segment"}
+              type="button"
+              onClick={() => updateDraftLayer({ territoryLayerMode: "hidden" })}
+            >
+              Oculto
             </button>
           </div>
         </section>
@@ -390,6 +421,7 @@ export function App() {
             Nivel: {selectedAppliedLevel.label} - Color: {COLOR_MODE_LABELS[appliedLayer.colorMode]} - Vista:{" "}
             {VIEW_MODE_LABELS[appliedLayer.viewMode]} - 3D: {GEOMETRY_MODE_LABELS[appliedLayer.geometryMode]}
           </p>
+          <p>Mapa territorial: {TERRITORY_LAYER_LABELS[appliedLayer.territoryLayerMode]}</p>
           <p>Overlay: {TRANSPORT_OVERLAY_LABELS[appliedLayer.transportOverlay]}</p>
           <p>Territorios: {getTerritorySelectionLabel(appliedLayer.territoryIds, appliedTerritoryOptions)}</p>
         </section>
@@ -403,6 +435,7 @@ export function App() {
         indicator={appliedLayer.indicator}
         onDataError={setMapError}
         geometryMode={appliedLayer.geometryMode}
+        territoryLayerMode={appliedLayer.territoryLayerMode}
         transportOverlay={appliedLayer.transportOverlay}
         territoryIds={appliedLayer.territoryIds}
         territoryLevel={appliedLayer.territoryLevel}

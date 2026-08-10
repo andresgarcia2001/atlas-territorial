@@ -123,6 +123,8 @@ export type ViewMode = "flat" | "extruded";
 
 export type GeometryMode = "surface" | "bars";
 
+export type TerritoryLayerMode = "visible" | "hidden";
+
 export type TransportOverlayMode = "none" | "ba_bus_routes";
 
 export type LayerSettings = {
@@ -130,6 +132,7 @@ export type LayerSettings = {
   colorMode: ColorMode;
   viewMode: ViewMode;
   geometryMode: GeometryMode;
+  territoryLayerMode: TerritoryLayerMode;
   transportOverlay: TransportOverlayMode;
   territoryLevel: TerritoryLevelId;
   territoryIds: string[];
