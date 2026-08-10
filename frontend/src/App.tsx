@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
-import { fetchIndicators, fetchTerritoryLevels, fetchTerritoryOptions } from "./api";
+import { fetchIndicators, fetchTerritoryLevels, fetchTerritoryOptions, fetchTransportRouteLines } from "./api";
 import { MapView } from "./components/MapView";
 import { getAvailableIndicatorGroups, getIndicatorOption, type IndicatorOption } from "./indicatorCatalog";
 import {
@@ -12,7 +12,13 @@ import {
   getInitialTerritoryLevel,
   getTerritoryLevelsOrFallback,
   getTerritorySelectionLabel,
+  getTransportRouteLineSelectionLabel,
 } from "./territoryMetadata";
+import {
+  compareTransportRouteLines,
+  createTransportLineColorMap,
+  getStableTransportColorScope,
+} from "./transportColors";
 import type {
   ColorMode,
   GeometryMode,
@@ -22,10 +28,12 @@ import type {
   TerritoryOption,
   TerritoryLayerMode,
   TransportOverlayMode,
+  TransportRouteLineOption,
   ViewMode,
 } from "./types";
 
 const YEAR = 2022;
+const BA_BUS_ROUTES_SOURCE = "BA DATA colectivos recorridos";
 
 const COLOR_MODE_LABELS: Record<ColorMode, string> = {
   indicator: "Valor",
@@ -58,6 +66,7 @@ export function App() {
   const [territoryOptionsByLevel, setTerritoryOptionsByLevel] = useState<
     Partial<Record<TerritoryLevelId, TerritoryOption[]>>
   >({});
+  const [transportRouteLines, setTransportRouteLines] = useState<TransportRouteLineOption[]>([]);
   const [draftLayer, setDraftLayer] = useState<LayerSettings>(DEFAULT_LAYER_SETTINGS);
   const [appliedLayer, setAppliedLayer] = useState<LayerSettings>(DEFAULT_LAYER_SETTINGS);
   const [metadataError, setMetadataError] = useState<string | null>(null);
@@ -80,6 +89,17 @@ export function App() {
     territoryLevels.find((level) => level.id === appliedLayer.territoryLevel) ?? FALLBACK_TERRITORY_LEVELS[0];
   const territoryOptions = territoryOptionsByLevel[draftLayer.territoryLevel] ?? [];
   const appliedTerritoryOptions = territoryOptionsByLevel[appliedLayer.territoryLevel] ?? [];
+  const availableTransportRouteLines = useMemo(
+    () => transportRouteLines.map((routeLine) => routeLine.line),
+    [transportRouteLines],
+  );
+  const transportLineColorByLine = useMemo(
+    () =>
+      createTransportLineColorMap(
+        getStableTransportColorScope(availableTransportRouteLines, draftLayer.transportRouteLines),
+      ),
+    [availableTransportRouteLines, draftLayer.transportRouteLines],
+  );
   const hasPendingChanges = !areLayerSettingsEqual(draftLayer, appliedLayer);
 
   useEffect(() => {
@@ -149,6 +169,27 @@ export function App() {
     };
   }, [draftLayer.territoryLevel]);
 
+  useEffect(() => {
+    let isCancelled = false;
+
+    fetchTransportRouteLines(BA_BUS_ROUTES_SOURCE)
+      .then((loadedLines) => {
+        if (!isCancelled) {
+          setTransportRouteLines(loadedLines);
+          setMetadataError(null);
+        }
+      })
+      .catch((caughtError: Error) => {
+        if (!isCancelled) {
+          setMetadataError(caughtError.message);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
+
   function updateDraftLayer(nextLayer: Partial<LayerSettings>) {
     setDraftLayer((currentLayer) => ({
       ...currentLayer,
@@ -180,6 +221,20 @@ export function App() {
       return {
         ...currentLayer,
         territoryIds,
+      };
+    });
+  }
+
+  function toggleTransportRouteLine(line: string) {
+    setDraftLayer((currentLayer) => {
+      const isSelected = currentLayer.transportRouteLines.includes(line);
+      const transportRouteLines = isSelected
+        ? currentLayer.transportRouteLines.filter((currentLine) => currentLine !== line)
+        : [...currentLayer.transportRouteLines, line].sort(compareTransportRouteLines);
+
+      return {
+        ...currentLayer,
+        transportRouteLines,
       };
     });
   }
@@ -360,31 +415,6 @@ export function App() {
           </div>
         </section>
 
-        <section className="control-block" aria-labelledby="overlays-heading">
-          <div className="control-title">
-            <label id="overlays-heading">Overlays</label>
-            <span>{TRANSPORT_OVERLAY_LABELS[draftLayer.transportOverlay]}</span>
-          </div>
-          <div className="segmented" role="group" aria-label="Capas de transporte">
-            <button
-              aria-pressed={draftLayer.transportOverlay === "none"}
-              className={draftLayer.transportOverlay === "none" ? "segment is-active" : "segment"}
-              type="button"
-              onClick={() => updateDraftLayer({ territoryLayerMode: "visible", transportOverlay: "none" })}
-            >
-              Ninguno
-            </button>
-            <button
-              aria-pressed={draftLayer.transportOverlay === "ba_bus_routes"}
-              className={draftLayer.transportOverlay === "ba_bus_routes" ? "segment is-active" : "segment"}
-              type="button"
-              onClick={() => updateDraftLayer({ territoryLayerMode: "hidden", transportOverlay: "ba_bus_routes" })}
-            >
-              Colectivos BA
-            </button>
-          </div>
-        </section>
-
         <section className="control-block" aria-labelledby="territory-layer-heading">
           <div className="control-title">
             <label id="territory-layer-heading">Mapa territorial</label>
@@ -410,6 +440,80 @@ export function App() {
           </div>
         </section>
 
+        <section className="control-block" aria-labelledby="overlays-heading">
+          <div className="control-title">
+            <label id="overlays-heading">Overlays</label>
+            <span>{TRANSPORT_OVERLAY_LABELS[draftLayer.transportOverlay]}</span>
+          </div>
+          <div className="segmented" role="group" aria-label="Capas de transporte">
+            <button
+              aria-pressed={draftLayer.transportOverlay === "none"}
+              className={draftLayer.transportOverlay === "none" ? "segment is-active" : "segment"}
+              type="button"
+              onClick={() => updateDraftLayer({ transportOverlay: "none" })}
+            >
+              Ninguno
+            </button>
+            <button
+              aria-pressed={draftLayer.transportOverlay === "ba_bus_routes"}
+              className={draftLayer.transportOverlay === "ba_bus_routes" ? "segment is-active" : "segment"}
+              type="button"
+              onClick={() => updateDraftLayer({ transportOverlay: "ba_bus_routes" })}
+            >
+              Colectivos BA
+            </button>
+          </div>
+
+          {draftLayer.transportOverlay === "ba_bus_routes" && (
+            <div className="transport-lines" aria-labelledby="transport-lines-heading">
+              <div className="control-title">
+                <label id="transport-lines-heading">Líneas</label>
+                <span>{getTransportRouteLineSelectionLabel(draftLayer.transportRouteLines)}</span>
+              </div>
+
+              <div className="territory-actions">
+                <button
+                  className={
+                    draftLayer.transportRouteLines.length === 0 ? "territory-action is-active" : "territory-action"
+                  }
+                  type="button"
+                  onClick={() => updateDraftLayer({ transportRouteLines: [] })}
+                >
+                  Todas
+                </button>
+              </div>
+
+              <div className="transport-line-list">
+                {transportRouteLines.length === 0 ? (
+                  <p className="empty-state">Sin líneas cargadas</p>
+                ) : (
+                  transportRouteLines.map((routeLine) => (
+                    <button
+                      aria-pressed={draftLayer.transportRouteLines.includes(routeLine.line)}
+                      className={
+                        draftLayer.transportRouteLines.includes(routeLine.line)
+                          ? "transport-line-button is-active"
+                          : "transport-line-button"
+                      }
+                      key={routeLine.line}
+                      style={
+                        {
+                          "--line-color": transportLineColorByLine.get(routeLine.line) ?? "#d7e0da",
+                        } as CSSProperties
+                      }
+                      type="button"
+                      onClick={() => toggleTransportRouteLine(routeLine.line)}
+                    >
+                      <span>{routeLine.line}</span>
+                      <small>{routeLine.route_count}</small>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </section>
+
         <button className="apply-button" type="button" disabled={!hasPendingChanges} onClick={applyDraftLayer}>
           Buscar
         </button>
@@ -423,6 +527,9 @@ export function App() {
           </p>
           <p>Mapa territorial: {TERRITORY_LAYER_LABELS[appliedLayer.territoryLayerMode]}</p>
           <p>Overlay: {TRANSPORT_OVERLAY_LABELS[appliedLayer.transportOverlay]}</p>
+          {appliedLayer.transportOverlay === "ba_bus_routes" && (
+            <p>Líneas: {getTransportRouteLineSelectionLabel(appliedLayer.transportRouteLines)}</p>
+          )}
           <p>Territorios: {getTerritorySelectionLabel(appliedLayer.territoryIds, appliedTerritoryOptions)}</p>
         </section>
 
@@ -436,7 +543,9 @@ export function App() {
         onDataError={setMapError}
         geometryMode={appliedLayer.geometryMode}
         territoryLayerMode={appliedLayer.territoryLayerMode}
+        transportAvailableLines={availableTransportRouteLines}
         transportOverlay={appliedLayer.transportOverlay}
+        transportRouteLines={appliedLayer.transportRouteLines}
         territoryIds={appliedLayer.territoryIds}
         territoryLevel={appliedLayer.territoryLevel}
         viewMode={appliedLayer.viewMode}

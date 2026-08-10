@@ -159,3 +159,21 @@ def fetch_transport_routes(source=None, lines=None):
         with conn.cursor() as cur:
             cur.execute(query, (source, source, lines, lines))
             return cur.fetchall()
+
+
+def fetch_transport_route_lines(source=None):
+    query = """
+        SELECT
+          line,
+          COUNT(*) AS route_count
+        FROM transport_routes
+        WHERE line IS NOT NULL
+          AND (%s::text IS NULL OR source = %s)
+        GROUP BY line
+        ORDER BY line;
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (source, source))
+            return cur.fetchall()

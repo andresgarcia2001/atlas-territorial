@@ -9,6 +9,7 @@ from repositories import (
     fetch_indicator_names,
     fetch_indicator_values,
     fetch_map_data,
+    fetch_transport_route_lines,
     fetch_transport_routes,
     fetch_territory_levels,
     fetch_territories_with_geometry,
@@ -255,5 +256,20 @@ def get_transport_routes(
                 to_name,
                 geometry,
             ) in rows
+        ],
+    }
+
+
+@app.get("/transport-route-lines")
+def list_transport_route_lines(source: str | None = None):
+    rows = fetch_transport_route_lines(source)
+
+    return {
+        "lines": [
+            {
+                "line": line,
+                "route_count": route_count,
+            }
+            for line, route_count in rows
         ],
     }

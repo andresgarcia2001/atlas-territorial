@@ -7,6 +7,7 @@ import type {
   TerritoryLevelsResponse,
   TerritoryOptionsResponse,
   TransportRouteData,
+  TransportRouteLinesResponse,
 } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -159,4 +160,22 @@ export async function fetchTransportRoutes(source?: string, lines: string[] = []
   }
 
   return (await response.json()) as TransportRouteData;
+}
+
+export async function fetchTransportRouteLines(source?: string) {
+  const searchParams = new URLSearchParams();
+
+  if (source) {
+    searchParams.set("source", source);
+  }
+
+  const query = searchParams.toString();
+  const response = await fetch(`${API_URL}/transport-route-lines${query ? `?${query}` : ""}`);
+
+  if (!response.ok) {
+    throw new Error("No se pudieron cargar las líneas de transporte.");
+  }
+
+  const data = (await response.json()) as TransportRouteLinesResponse;
+  return data.lines;
 }

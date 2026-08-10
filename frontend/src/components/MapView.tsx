@@ -11,6 +11,12 @@ import {
   getTransportVisualMode,
   type TransportVisualMode,
 } from "../mapModes";
+import {
+  compareTransportRouteLines,
+  createTransportLineColorMap,
+  getFallbackTransportRouteColor,
+  getStableTransportColorScope,
+} from "../transportColors";
 import type {
   ColorMode,
   GeometryMode,
@@ -27,6 +33,7 @@ import type {
 
 type MapViewProps = LayerSettings & {
   onDataError?: (message: string | null) => void;
+  transportAvailableLines: string[];
   year: number;
 };
 
@@ -48,6 +55,12 @@ type LoadedIndicatorValues = {
 
 type LoadedMapData = LoadedIndicatorValues & {
   data: MapData;
+};
+
+type LoadedTransportRouteData = {
+  colorLineKey: string;
+  data: TransportRouteData;
+  lineKey: string;
 };
 
 type LegendState =
@@ -110,21 +123,6 @@ const TERRITORY_COLORS = [
   "#fb923c",
 ];
 
-const TRANSPORT_ROUTE_COLORS = [
-  "#00e5ff",
-  "#ff2bd6",
-  "#7cff00",
-  "#ffb000",
-  "#8b5cf6",
-  "#00ffa3",
-  "#ff3864",
-  "#2d7dff",
-  "#faff00",
-  "#ff7a00",
-  "#39ff14",
-  "#ff4d6d",
-];
-
 const TRANSPORT_NIGHT_MASK_DATA = {
   type: "FeatureCollection",
   features: [
@@ -147,8 +145,17 @@ const TRANSPORT_NIGHT_MASK_DATA = {
   ],
 } satisfies GeoJSON.FeatureCollection<GeoJSON.Polygon>;
 
+const EMPTY_TRANSPORT_ROUTE_DATA = {
+  type: "FeatureCollection",
+  features: [],
+} satisfies TransportRouteData;
+
 function getTerritoryFilterKey(territoryIds: string[]) {
   return territoryIds.length === 0 ? "all" : territoryIds.join("|");
+}
+
+function getTransportRouteLineKey(transportRouteLines: string[]) {
+  return transportRouteLines.length === 0 ? "all" : transportRouteLines.join("|");
 }
 
 function formatIndicatorName(indicator: string) {
@@ -220,17 +227,6 @@ function getTerritoryColor(territoryId: string) {
   return TERRITORY_COLORS[hash % TERRITORY_COLORS.length];
 }
 
-function getTransportRouteColor(line: string | null, routeId: string) {
-  const routeKey = line ?? routeId;
-  let hash = 0;
-
-  for (let index = 0; index < routeKey.length; index += 1) {
-    hash = (hash * 31 + routeKey.charCodeAt(index)) >>> 0;
-  }
-
-  return TRANSPORT_ROUTE_COLORS[hash % TRANSPORT_ROUTE_COLORS.length];
-}
-
 function getValueByTerritoryId(values: IndicatorValue[]) {
   return new Map(values.map((indicatorValue) => [indicatorValue.territory_id, indicatorValue.value]));
 }
@@ -256,16 +252,65 @@ function composeMapData(
   };
 }
 
-function composeTransportRouteData(data: TransportRouteData): TransportRouteData {
+function getTransportRouteLinesFromData(data: TransportRouteData) {
+  return Array.from(
+    new Set(
+      data.features.flatMap((feature) => {
+        const line = feature.properties.line;
+
+        return line ? [line] : [];
+      }),
+    ),
+  ).sort(compareTransportRouteLines);
+}
+
+function getTransportRouteLineOrder(
+  data: TransportRouteData,
+  transportRouteLines: string[],
+  transportAvailableLines: string[],
+) {
+  const visibleLines = transportRouteLines.length > 0 ? transportRouteLines : getTransportRouteLinesFromData(data);
+
+  return getStableTransportColorScope(transportAvailableLines, visibleLines);
+}
+
+function composeTransportRouteData(
+  data: TransportRouteData,
+  transportRouteLines: string[] = [],
+  transportAvailableLines: string[] = [],
+): TransportRouteData {
+  const colorByLine = createTransportLineColorMap(
+    getTransportRouteLineOrder(data, transportRouteLines, transportAvailableLines),
+  );
+
   return {
     ...data,
     features: data.features.map((feature) => ({
       ...feature,
       properties: {
         ...feature.properties,
-        route_color: getTransportRouteColor(feature.properties.line, feature.properties.route_id),
+        route_color: feature.properties.line
+          ? colorByLine.get(feature.properties.line) ?? getFallbackTransportRouteColor(feature.properties.line)
+          : getFallbackTransportRouteColor(feature.properties.route_id),
       },
     })),
+  };
+}
+
+function filterTransportRouteData(data: TransportRouteData, transportRouteLines: string[]): TransportRouteData {
+  if (transportRouteLines.length === 0) {
+    return data;
+  }
+
+  const selectedLines = new Set(transportRouteLines);
+
+  return {
+    ...data,
+    features: data.features.filter((feature) => {
+      const line = feature.properties.line;
+
+      return line !== null && selectedLines.has(line);
+    }),
   };
 }
 
@@ -367,6 +412,15 @@ function composeBarMapData(data: MapData): MapData {
 
 function clampLatitude(latitude: number) {
   return Math.max(MIN_LATITUDE, Math.min(MAX_LATITUDE, latitude));
+}
+
+function runWhenStyleIsReady(map: maplibregl.Map, callback: () => void) {
+  if (map.isStyleLoaded()) {
+    callback();
+    return;
+  }
+
+  map.once("load", callback);
 }
 
 function fitMapToData(map: maplibregl.Map, data: MapData) {
@@ -875,6 +929,12 @@ function renderTransportRouteData(
   }
 }
 
+function clearTransportRouteData(map: maplibregl.Map) {
+  const source = map.getSource(TRANSPORT_ROUTES_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+
+  source?.setData(EMPTY_TRANSPORT_ROUTE_DATA);
+}
+
 function renderTerritoryData(
   map: maplibregl.Map,
   loadedData: MapData,
@@ -915,6 +975,8 @@ export function MapView({
   onDataError,
   territoryLayerMode,
   transportOverlay,
+  transportAvailableLines,
+  transportRouteLines,
   territoryIds,
   territoryLevel,
   viewMode,
@@ -924,7 +986,7 @@ export function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const loadedTerritoryDataRef = useRef<LoadedTerritoryData | null>(null);
   const loadedIndicatorValuesRef = useRef<LoadedIndicatorValues | null>(null);
-  const loadedTransportRouteDataRef = useRef<TransportRouteData | null>(null);
+  const loadedTransportRouteDataByLineKeyRef = useRef<Map<string, LoadedTransportRouteData>>(new Map());
   const renderedDataRef = useRef<LoadedMapData | null>(null);
   const latestLayerSettingsRef = useRef<LayerSettings>({
     colorMode,
@@ -932,13 +994,20 @@ export function MapView({
     indicator,
     territoryLayerMode,
     transportOverlay,
+    transportRouteLines,
     territoryIds,
     territoryLevel,
     viewMode,
   });
   const lastFitKeyRef = useRef<string | null>(null);
+  const lastTransportFitKeyRef = useRef<string | null>(null);
   const [legend, setLegend] = useState<LegendState | null>(null);
   const territoryKey = useMemo(() => getTerritoryFilterKey(territoryIds), [territoryIds]);
+  const transportLineKey = useMemo(() => getTransportRouteLineKey(transportRouteLines), [transportRouteLines]);
+  const transportColorLineKey = useMemo(
+    () => getTransportRouteLineKey(transportAvailableLines),
+    [transportAvailableLines],
+  );
   const transportVisualMode = useMemo(() => getTransportVisualMode(viewMode), [viewMode]);
 
   latestLayerSettingsRef.current = {
@@ -947,6 +1016,7 @@ export function MapView({
     indicator,
     territoryLayerMode,
     transportOverlay,
+    transportRouteLines,
     territoryIds,
     territoryLevel,
     viewMode,
@@ -1052,11 +1122,7 @@ export function MapView({
           }
         };
 
-        if (mapInstance.loaded()) {
-          applyData();
-        } else {
-          mapInstance.once("load", applyData);
-        }
+        runWhenStyleIsReady(mapInstance, applyData);
       } catch (caughtError) {
         if (!isCancelled) {
           setLegend(null);
@@ -1109,11 +1175,7 @@ export function MapView({
           }
         };
 
-        if (mapInstance.loaded()) {
-          applyData();
-        } else {
-          mapInstance.once("load", applyData);
-        }
+        runWhenStyleIsReady(mapInstance, applyData);
       } catch (caughtError) {
         if (!isCancelled) {
           setLegend(null);
@@ -1148,37 +1210,64 @@ export function MapView({
       };
     }
 
-    function applyTransportData(data: TransportRouteData, shouldFitMap: boolean) {
+    function applyTransportData(data: TransportRouteData) {
       const applyData = () => {
         if (!isCancelled) {
+          const shouldFitMap = lastTransportFitKeyRef.current !== transportLineKey;
+
           renderTransportRouteData(mapInstance, data, true, shouldFitMap, transportVisualMode);
+          lastTransportFitKeyRef.current = transportLineKey;
         }
       };
 
-      if (mapInstance.loaded()) {
-        applyData();
-      } else {
-        mapInstance.once("load", applyData);
-      }
+      runWhenStyleIsReady(mapInstance, applyData);
     }
 
-    if (loadedTransportRouteDataRef.current) {
-      applyTransportData(loadedTransportRouteDataRef.current, false);
+    const cachedTransportData = loadedTransportRouteDataByLineKeyRef.current.get(transportLineKey);
+
+    if (cachedTransportData) {
+      const data =
+        cachedTransportData.colorLineKey === transportColorLineKey
+          ? cachedTransportData.data
+          : composeTransportRouteData(cachedTransportData.data, transportRouteLines, transportAvailableLines);
+
+      if (cachedTransportData.colorLineKey !== transportColorLineKey) {
+        loadedTransportRouteDataByLineKeyRef.current.set(transportLineKey, {
+          colorLineKey: transportColorLineKey,
+          data,
+          lineKey: transportLineKey,
+        });
+      }
+
+      applyTransportData(data);
       return () => {
         isCancelled = true;
       };
     }
 
+    clearTransportRouteData(mapInstance);
+
     async function loadTransportRoutes() {
       try {
-        const data = composeTransportRouteData(await fetchTransportRoutes(BA_BUS_ROUTES_SOURCE));
+        const data = composeTransportRouteData(
+          filterTransportRouteData(
+            await fetchTransportRoutes(BA_BUS_ROUTES_SOURCE, transportRouteLines),
+            transportRouteLines,
+          ),
+          transportRouteLines,
+          transportAvailableLines,
+        );
 
         if (isCancelled) {
           return;
         }
 
-        loadedTransportRouteDataRef.current = data;
-        applyTransportData(data, true);
+        loadedTransportRouteDataByLineKeyRef.current.set(transportLineKey, {
+          colorLineKey: transportColorLineKey,
+          data,
+          lineKey: transportLineKey,
+        });
+        applyTransportData(data);
       } catch (caughtError) {
         if (!isCancelled) {
           onDataError?.(
@@ -1193,7 +1282,15 @@ export function MapView({
     return () => {
       isCancelled = true;
     };
-  }, [onDataError, transportOverlay, transportVisualMode]);
+  }, [
+    onDataError,
+    transportAvailableLines,
+    transportColorLineKey,
+    transportLineKey,
+    transportOverlay,
+    transportRouteLines,
+    transportVisualMode,
+  ]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1216,6 +1313,7 @@ export function MapView({
       indicator,
       territoryLayerMode,
       transportOverlay,
+      transportRouteLines,
       territoryIds,
       territoryLevel,
       viewMode,
@@ -1231,6 +1329,7 @@ export function MapView({
     territoryLayerMode,
     territoryLevel,
     transportOverlay,
+    transportRouteLines,
     viewMode,
     year,
   ]);

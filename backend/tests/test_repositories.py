@@ -105,3 +105,19 @@ def test_fetch_transport_routes_reads_overlay_table(monkeypatch):
         ["10", "152"],
         ["10", "152"],
     )
+
+
+def test_fetch_transport_route_lines_reads_distinct_lines(monkeypatch):
+    cursor = FakeCursor()
+    monkeypatch.setattr(repositories, "get_connection", lambda: FakeConnection(cursor))
+
+    rows = repositories.fetch_transport_route_lines(source="BA DATA colectivos recorridos")
+
+    assert rows == []
+    assert "FROM transport_routes" in cursor.executed_query
+    assert "GROUP BY line" in cursor.executed_query
+    assert "ST_AsGeoJSON" not in cursor.executed_query
+    assert cursor.executed_params == (
+        "BA DATA colectivos recorridos",
+        "BA DATA colectivos recorridos",
+    )

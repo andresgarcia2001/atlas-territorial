@@ -9,6 +9,7 @@ import {
   getInitialTerritoryLevel,
   getTerritoryLevelsOrFallback,
   getTerritorySelectionLabel,
+  getTransportRouteLineSelectionLabel,
 } from "./territoryMetadata";
 import type { TerritoryLevel } from "./types";
 
@@ -56,7 +57,13 @@ describe("territoryMetadata", () => {
     expect(
       areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
         ...DEFAULT_LAYER_SETTINGS,
-        transportOverlay: "none",
+        transportOverlay: "ba_bus_routes",
+      }),
+    ).toBe(false);
+    expect(
+      areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
+        ...DEFAULT_LAYER_SETTINGS,
+        transportRouteLines: ["010"],
       }),
     ).toBe(false);
     expect(
@@ -72,5 +79,8 @@ describe("territoryMetadata", () => {
         [{ id: "provincia_02", name: "Buenos Aires", level: "province", parent_id: null }],
       ),
     ).toBe("Buenos Aires");
+    expect(getTransportRouteLineSelectionLabel([])).toBe("Todas");
+    expect(getTransportRouteLineSelectionLabel(["010"])).toBe("Línea 010");
+    expect(getTransportRouteLineSelectionLabel(["010", "152"])).toBe("2 líneas");
   });
 });

@@ -223,3 +223,30 @@ def test_transport_routes_returns_geojson_feature_collection_contract(monkeypatc
             }
         ],
     }
+
+
+def test_transport_route_lines_returns_metadata_contract(monkeypatch):
+    captured_args = {}
+
+    def fake_fetch_transport_route_lines(source=None):
+        captured_args.update({"source": source})
+        return [
+            ("10", 2),
+            ("152", 4),
+        ]
+
+    monkeypatch.setattr(api_main, "fetch_transport_route_lines", fake_fetch_transport_route_lines)
+
+    response = client.get(
+        "/transport-route-lines",
+        params={"source": "BA DATA colectivos recorridos"},
+    )
+
+    assert response.status_code == 200
+    assert captured_args == {"source": "BA DATA colectivos recorridos"}
+    assert response.json() == {
+        "lines": [
+            {"line": "10", "route_count": 2},
+            {"line": "152", "route_count": 4},
+        ],
+    }

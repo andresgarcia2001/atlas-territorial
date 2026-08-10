@@ -15,7 +15,8 @@ export const DEFAULT_LAYER_SETTINGS: LayerSettings = {
   viewMode: "flat",
   geometryMode: "surface",
   territoryLayerMode: "hidden",
-  transportOverlay: "ba_bus_routes",
+  transportOverlay: "none",
+  transportRouteLines: [],
   territoryLevel: DEFAULT_TERRITORY_LEVEL,
   territoryIds: [],
 };
@@ -32,6 +33,7 @@ export function areLayerSettingsEqual(first: LayerSettings, second: LayerSetting
     first.geometryMode === second.geometryMode &&
     first.territoryLayerMode === second.territoryLayerMode &&
     first.transportOverlay === second.transportOverlay &&
+    areArraysEqual(first.transportRouteLines, second.transportRouteLines) &&
     first.territoryLevel === second.territoryLevel &&
     areArraysEqual(first.territoryIds, second.territoryIds)
   );
@@ -69,6 +71,18 @@ export function getTerritorySelectionLabel(territoryIds: string[], territoryOpti
   }
 
   return `${territoryIds.length} territorios`;
+}
+
+export function getTransportRouteLineSelectionLabel(transportRouteLines: string[]) {
+  if (transportRouteLines.length === 0) {
+    return "Todas";
+  }
+
+  if (transportRouteLines.length === 1) {
+    return `Línea ${transportRouteLines[0]}`;
+  }
+
+  return `${transportRouteLines.length} líneas`;
 }
 
 export async function getTerritoryLevelsOrFallback(loadTerritoryLevels: () => Promise<TerritoryLevel[]>) {

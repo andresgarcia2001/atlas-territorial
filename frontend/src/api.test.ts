@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchIndicatorValues, fetchMapData, fetchTerritories, fetchTerritoryOptions, fetchTransportRoutes } from "./api";
+import {
+  fetchIndicatorValues,
+  fetchMapData,
+  fetchTerritories,
+  fetchTerritoryOptions,
+  fetchTransportRouteLines,
+  fetchTransportRoutes,
+} from "./api";
 
 
 function mockJsonResponse(body: unknown) {
@@ -108,5 +115,16 @@ describe("api", () => {
     expect(requestedUrl.pathname).toBe("/transport-routes");
     expect(requestedUrl.searchParams.get("source")).toBe("BA DATA colectivos recorridos");
     expect(requestedUrl.searchParams.getAll("lines")).toEqual(["10", "152"]);
+  });
+
+  it("builds transport route line metadata requests with source", async () => {
+    const fetchMock = vi.fn<typeof fetch>(() => mockJsonResponse({ lines: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchTransportRouteLines("BA DATA colectivos recorridos");
+
+    const requestedUrl = getRequestedUrl(fetchMock);
+    expect(requestedUrl.pathname).toBe("/transport-route-lines");
+    expect(requestedUrl.searchParams.get("source")).toBe("BA DATA colectivos recorridos");
   });
 });

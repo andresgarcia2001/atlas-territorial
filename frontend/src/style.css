@@ -178,6 +178,103 @@ button {
   font-size: 13px;
 }
 
+.transport-lines {
+  display: grid;
+  gap: 10px;
+}
+
+.transport-line-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  max-height: 154px;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.transport-line-button {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 8px;
+  color: #1f2b26;
+  background: #ffffff;
+  border: 1px solid #d7e0da;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.transport-line-button::before {
+  width: 8px;
+  height: 18px;
+  background: var(--line-color, #d7e0da);
+  border-radius: 999px;
+  box-shadow: 0 0 9px var(--line-color, transparent);
+  content: "";
+  opacity: 0.72;
+}
+
+.transport-line-button span {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.transport-line-button small {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  color: #5d6b63;
+  font-size: 11px;
+  font-weight: 800;
+  background: #e6ece8;
+  border-radius: 999px;
+}
+
+.transport-line-button:hover {
+  border-color: var(--line-color, #0f766e);
+  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.1);
+}
+
+.transport-line-button.is-active {
+  color: #ffffff;
+  background: #0f766e;
+  border-color: var(--line-color, #0f766e);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--line-color, #0f766e) 54%, transparent),
+    0 7px 18px rgb(15 118 110 / 0.18);
+}
+
+.transport-line-button.is-active::before {
+  opacity: 1;
+}
+
+.transport-line-button.is-active small {
+  color: #0f766e;
+  background: #ffffff;
+}
+
+.empty-state {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 11px;
+  color: #6d7b73;
+  background: #ffffff;
+  border: 1px solid #d7e0da;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
 .segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -370,7 +467,8 @@ button {
   }
 
   .indicator-list,
-  .territory-list {
+  .territory-list,
+  .transport-line-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
@@ -383,6 +481,7 @@ button {
   .control-grid,
   .indicator-list,
   .territory-list,
+  .transport-line-list,
   .territory-level-list {
     grid-template-columns: 1fr;
   }

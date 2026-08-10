@@ -124,6 +124,15 @@ export type TransportRouteData = {
   features: TransportRouteFeature[];
 };
 
+export type TransportRouteLineOption = {
+  line: string;
+  route_count: number;
+};
+
+export type TransportRouteLinesResponse = {
+  lines: TransportRouteLineOption[];
+};
+
 export type ColorMode = "indicator" | "territory";
 
 export type ViewMode = "flat" | "extruded";
@@ -141,6 +150,7 @@ export type LayerSettings = {
   geometryMode: GeometryMode;
   territoryLayerMode: TerritoryLayerMode;
   transportOverlay: TransportOverlayMode;
+  transportRouteLines: string[];
   territoryLevel: TerritoryLevelId;
   territoryIds: string[];
 };
