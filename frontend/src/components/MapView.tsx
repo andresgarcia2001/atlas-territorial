@@ -2,7 +2,7 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { fetchIndicatorValues, fetchTerritories } from "../api";
+import { fetchIndicatorValues, fetchTerritories, fetchTransportRoutes } from "../api";
 import { getIndicatorLabel } from "../indicatorCatalog";
 import { getCameraPreset, getLayerVisibility } from "../mapModes";
 import type {
@@ -13,6 +13,8 @@ import type {
   MapData,
   MapFeature,
   TerritoryData,
+  TransportRouteData,
+  TransportRouteFeature,
   ViewMode,
 } from "../types";
 
@@ -57,12 +59,15 @@ const MIN_LATITUDE = -90;
 const MAX_LATITUDE = 90;
 const TERRITORY_SOURCE_ID = "territories";
 const TERRITORY_BARS_SOURCE_ID = "territory-bars";
+const TRANSPORT_ROUTES_SOURCE_ID = "transport-routes";
+const BA_BUS_ROUTES_SOURCE = "BA DATA colectivos recorridos";
 const INTERACTIVE_TERRITORY_LAYER_IDS = [
   "territories-fill",
   "territories-extrusion",
   "territory-bars-fill",
   "territory-bars-extrusion",
 ];
+const TRANSPORT_ROUTE_LAYER_IDS = ["transport-routes-casing", "transport-routes-line"];
 
 const TERRITORY_COLORS = [
   "#22c55e",
@@ -89,6 +94,21 @@ const TERRITORY_COLORS = [
   "#facc15",
   "#38bdf8",
   "#fb923c",
+];
+
+const TRANSPORT_ROUTE_COLORS = [
+  "#2563eb",
+  "#f97316",
+  "#16a34a",
+  "#dc2626",
+  "#9333ea",
+  "#0891b2",
+  "#ca8a04",
+  "#db2777",
+  "#4f46e5",
+  "#0f766e",
+  "#b45309",
+  "#be123c",
 ];
 
 function getTerritoryFilterKey(territoryIds: string[]) {
@@ -164,6 +184,17 @@ function getTerritoryColor(territoryId: string) {
   return TERRITORY_COLORS[hash % TERRITORY_COLORS.length];
 }
 
+function getTransportRouteColor(line: string | null, routeId: string) {
+  const routeKey = line ?? routeId;
+  let hash = 0;
+
+  for (let index = 0; index < routeKey.length; index += 1) {
+    hash = (hash * 31 + routeKey.charCodeAt(index)) >>> 0;
+  }
+
+  return TRANSPORT_ROUTE_COLORS[hash % TRANSPORT_ROUTE_COLORS.length];
+}
+
 function getValueByTerritoryId(values: IndicatorValue[]) {
   return new Map(values.map((indicatorValue) => [indicatorValue.territory_id, indicatorValue.value]));
 }
@@ -184,6 +215,19 @@ function composeMapData(
         value: valueByTerritoryId.get(feature.properties.id) ?? null,
         year,
         territory_color: getTerritoryColor(feature.properties.id),
+      },
+    })),
+  };
+}
+
+function composeTransportRouteData(data: TransportRouteData): TransportRouteData {
+  return {
+    ...data,
+    features: data.features.map((feature) => ({
+      ...feature,
+      properties: {
+        ...feature.properties,
+        route_color: getTransportRouteColor(feature.properties.line, feature.properties.route_id),
       },
     })),
   };
@@ -493,6 +537,110 @@ function addTerritoryLayers(
   }
 }
 
+function getTransportRoutePopupHtml(feature: TransportRouteFeature) {
+  const lineLabel = feature.properties.line ? `Línea ${feature.properties.line}` : "Recorrido";
+  const branchLabel = feature.properties.branch ? ` - ${feature.properties.branch}` : "";
+  const directionLabel = feature.properties.direction ? ` (${feature.properties.direction})` : "";
+  const fromToLabel =
+    feature.properties.from_name || feature.properties.to_name
+      ? `<br />${escapeHtml(feature.properties.from_name ?? "Origen sin dato")} - ${escapeHtml(
+          feature.properties.to_name ?? "Destino sin dato",
+        )}`
+      : "";
+
+  return `
+    <strong>${escapeHtml(lineLabel + branchLabel + directionLabel)}</strong>
+    ${fromToLabel}<br />
+    Fuente: ${escapeHtml(feature.properties.source)}
+  `;
+}
+
+function setTransportRouteVisibility(map: maplibregl.Map, isVisible: boolean) {
+  for (const layerId of TRANSPORT_ROUTE_LAYER_IDS) {
+    if (map.getLayer(layerId)) {
+      map.setLayoutProperty(layerId, "visibility", isVisible ? "visible" : "none");
+    }
+  }
+}
+
+function moveTransportRouteLayersToTop(map: maplibregl.Map) {
+  for (const layerId of TRANSPORT_ROUTE_LAYER_IDS) {
+    if (map.getLayer(layerId)) {
+      map.moveLayer(layerId);
+    }
+  }
+}
+
+function addTransportRouteLayers(map: maplibregl.Map, data: TransportRouteData) {
+  map.addSource(TRANSPORT_ROUTES_SOURCE_ID, {
+    type: "geojson",
+    data,
+  });
+
+  map.addLayer({
+    id: "transport-routes-casing",
+    type: "line",
+    source: TRANSPORT_ROUTES_SOURCE_ID,
+    layout: {
+      "line-cap": "round",
+      "line-join": "round",
+    },
+    paint: {
+      "line-color": "#111816",
+      "line-opacity": 0.62,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1.5, 10, 4, 14, 9] as never,
+    },
+  });
+
+  map.addLayer({
+    id: "transport-routes-line",
+    type: "line",
+    source: TRANSPORT_ROUTES_SOURCE_ID,
+    layout: {
+      "line-cap": "round",
+      "line-join": "round",
+    },
+    paint: {
+      "line-color": ["coalesce", ["get", "route_color"], "#2563eb"] as never,
+      "line-opacity": 0.92,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1, 10, 2.5, 14, 6] as never,
+    },
+  });
+
+  for (const layerId of TRANSPORT_ROUTE_LAYER_IDS) {
+    map.on("click", layerId, (event) => {
+      const feature = event.features?.[0] as unknown as TransportRouteFeature | undefined;
+
+      if (!feature || !event.lngLat) {
+        return;
+      }
+
+      new maplibregl.Popup().setLngLat(event.lngLat).setHTML(getTransportRoutePopupHtml(feature)).addTo(map);
+    });
+
+    map.on("mouseenter", layerId, () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+
+    map.on("mouseleave", layerId, () => {
+      map.getCanvas().style.cursor = "";
+    });
+  }
+}
+
+function renderTransportRouteData(map: maplibregl.Map, data: TransportRouteData, isVisible: boolean) {
+  const source = map.getSource(TRANSPORT_ROUTES_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+
+  if (source) {
+    source.setData(data);
+  } else {
+    addTransportRouteLayers(map, data);
+  }
+
+  setTransportRouteVisibility(map, isVisible);
+  moveTransportRouteLayersToTop(map);
+}
+
 function renderTerritoryData(
   map: maplibregl.Map,
   loadedData: MapData,
@@ -517,6 +665,7 @@ function renderTerritoryData(
   }
 
   applyViewMode(map, layerSettings.viewMode, layerSettings.geometryMode, hasBarGeometry(loadedData));
+  moveTransportRouteLayersToTop(map);
 }
 
 export function MapView({
@@ -524,6 +673,7 @@ export function MapView({
   geometryMode,
   indicator,
   onDataError,
+  transportOverlay,
   territoryIds,
   territoryLevel,
   viewMode,
@@ -538,6 +688,7 @@ export function MapView({
     colorMode,
     geometryMode,
     indicator,
+    transportOverlay,
     territoryIds,
     territoryLevel,
     viewMode,
@@ -546,7 +697,15 @@ export function MapView({
   const [legend, setLegend] = useState<LegendState | null>(null);
   const territoryKey = useMemo(() => getTerritoryFilterKey(territoryIds), [territoryIds]);
 
-  latestLayerSettingsRef.current = { colorMode, geometryMode, indicator, territoryIds, territoryLevel, viewMode };
+  latestLayerSettingsRef.current = {
+    colorMode,
+    geometryMode,
+    indicator,
+    transportOverlay,
+    territoryIds,
+    territoryLevel,
+    viewMode,
+  };
 
   function renderCurrentData(map: maplibregl.Map, shouldFitMap: boolean) {
     const territoryData = loadedTerritoryDataRef.current;
@@ -729,6 +888,56 @@ export function MapView({
 
   useEffect(() => {
     const map = mapRef.current;
+
+    if (!map) {
+      return;
+    }
+
+    const mapInstance = map;
+    let isCancelled = false;
+
+    if (transportOverlay !== "ba_bus_routes") {
+      setTransportRouteVisibility(mapInstance, false);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    async function loadTransportRoutes() {
+      try {
+        const data = composeTransportRouteData(await fetchTransportRoutes(BA_BUS_ROUTES_SOURCE));
+
+        if (isCancelled) {
+          return;
+        }
+
+        const applyData = () => {
+          renderTransportRouteData(mapInstance, data, true);
+        };
+
+        if (mapInstance.loaded()) {
+          applyData();
+        } else {
+          mapInstance.once("load", applyData);
+        }
+      } catch (caughtError) {
+        if (!isCancelled) {
+          onDataError?.(
+            caughtError instanceof Error ? caughtError.message : "No se pudieron cargar los recorridos de transporte.",
+          );
+        }
+      }
+    }
+
+    loadTransportRoutes();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [onDataError, transportOverlay]);
+
+  useEffect(() => {
+    const map = mapRef.current;
     const loadedData = renderedDataRef.current;
 
     if (
@@ -742,10 +951,18 @@ export function MapView({
       return;
     }
 
-    const layerSettings = { colorMode, geometryMode, indicator, territoryIds, territoryLevel, viewMode };
+    const layerSettings = {
+      colorMode,
+      geometryMode,
+      indicator,
+      transportOverlay,
+      territoryIds,
+      territoryLevel,
+      viewMode,
+    };
     renderTerritoryData(map, loadedData.data, layerSettings, false);
     setLegend(getLegend(loadedData.data, layerSettings));
-  }, [colorMode, geometryMode, indicator, territoryIds, territoryKey, territoryLevel, viewMode, year]);
+  }, [colorMode, geometryMode, indicator, territoryIds, territoryKey, territoryLevel, transportOverlay, viewMode, year]);
 
   return (
     <main className="map-shell" aria-label="Mapa de indicadores territoriales">

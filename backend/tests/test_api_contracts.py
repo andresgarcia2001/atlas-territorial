@@ -163,3 +163,63 @@ def test_map_data_allows_known_indicator_without_level_values(monkeypatch):
     assert response.status_code == 200
     assert response.json()["features"] == []
     assert captured_args == {"indicator": "poblacion_total", "year": 2022, "level": "municipality"}
+
+
+def test_transport_routes_returns_geojson_feature_collection_contract(monkeypatch):
+    captured_args = {}
+    geometry = {
+        "type": "MultiLineString",
+        "coordinates": [[[[-58.4, -34.6], [-58.42, -34.62]]]],
+    }
+
+    def fake_fetch_transport_routes(source=None, lines=None):
+        captured_args.update({"source": source, "lines": lines})
+        return [
+            (
+                "ba_bus_route_10_a_i",
+                "BA DATA colectivos recorridos",
+                "10-A-I",
+                "10",
+                "A",
+                "I",
+                "Comun",
+                "CABA",
+                "Retiro",
+                "Palermo",
+                geometry,
+            )
+        ]
+
+    monkeypatch.setattr(api_main, "fetch_transport_routes", fake_fetch_transport_routes)
+
+    response = client.get(
+        "/transport-routes",
+        params=[
+            ("source", "BA DATA colectivos recorridos"),
+            ("lines", "10"),
+        ],
+    )
+
+    assert response.status_code == 200
+    assert captured_args == {"source": "BA DATA colectivos recorridos", "lines": ["10"]}
+    assert response.json() == {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "id": "ba_bus_route_10_a_i",
+                    "source": "BA DATA colectivos recorridos",
+                    "route_id": "10-A-I",
+                    "line": "10",
+                    "branch": "A",
+                    "direction": "I",
+                    "service_type": "Comun",
+                    "jurisdiction": "CABA",
+                    "from_name": "Retiro",
+                    "to_name": "Palermo",
+                },
+                "geometry": geometry,
+            }
+        ],
+    }

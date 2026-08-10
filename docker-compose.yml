@@ -66,6 +66,7 @@ services:
       CENSUS_RADIUS_NAME_PROPERTY: ${CENSUS_RADIUS_NAME_PROPERTY:-}
       CENSUS_RADIUS_PARENT_PROPERTY: ${CENSUS_RADIUS_PARENT_PROPERTY:-}
       CENSUS_RADII_SOURCE: ${CENSUS_RADII_SOURCE:-INDEC / IGN}
+      BA_BUS_ROUTES_GEOJSON: ${BA_BUS_ROUTES_GEOJSON:-/data/colectivos_recorridos.geojson}
     volumes:
       - ./scripts:/scripts:ro
       - ./data:/data

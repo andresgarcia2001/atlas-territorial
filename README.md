@@ -52,6 +52,7 @@ Fuentes usadas actualmente:
 | Municipios, comunas, juntas y gobiernos locales disponibles en IGN | WFS `ign:municipio`, normalizado en `data/municipios_ign.geojson` | Poligonos municipales/locales para el mapa. | [IGN WFS GetCapabilities](https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetCapabilities) y descarga GeoJSON con `typeName=ign:municipio`: [GetFeature](https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetFeature&typeName=ign:municipio&outputFormat=application/json&srsName=EPSG:4326). |
 | Gobiernos locales de Santiago del Estero y validacion externa de codigos | `gobiernos-locales.geojson` de Georef | Suplemento de poligonos faltantes para Santiago del Estero y verificacion de casos con `in1` faltante o duplicado. | [Georef - descarga de base completa](https://www.argentina.gob.ar/georef/descarga-de-la-base-completa) y endpoint usado: [gobiernos-locales.geojson](https://apis.datos.gob.ar/georef/api/v2.0/gobiernos-locales.geojson). |
 | Codigos geograficos de referencia | No se carga como dataset independiente | Referencia conceptual para interpretar codigos territoriales nacionales. | [INDEC - Codigos geograficos del Censo 2022](https://redatam.indec.gob.ar/redarg/CENSOS/CPV2022/Docs/codcart.htm). |
+| Recorridos de colectivos de CABA | `data/colectivos_recorridos.geojson` opcional | Overlay de lineas de transporte sobre el mapa territorial. | [BA DATA - Colectivos: recorridos](https://data.buenosaires.gob.ar/es_AR/dataset/colectivos-recorridos), recurso GeoJSON. |
 
 Tratamientos y fusiones aplicadas:
 
@@ -215,6 +216,7 @@ Variables principales:
 - `IGN_MUNICIPALITIES_GEOJSON`: GeoJSON de municipios/localidades censales IGN.
 - `CENSUS_RADII_GEOJSON`: GeoJSON de radios censales.
 - `CENSUS_RADII_SOURCE`: etiqueta de fuente para radios censales.
+- `BA_BUS_ROUTES_GEOJSON`: GeoJSON opcional de recorridos de colectivos BA DATA.
 
 Si un dataset opcional no esta configurado o no existe, el loader lo omite. Si se
 configura explicitamente una ruta y el archivo no existe, el loader falla.
@@ -248,6 +250,35 @@ docker-compose --profile tools run --rm loader python load_territories.py --skip
 Ese modo no cambia el comportamiento por defecto. Solo omite features cuyo padre
 obligatorio no exista y reporta en consola cada territorio saltado con su padre
 faltante.
+
+## Cargar overlays de transporte
+
+Los recorridos de colectivos se cargan como overlay independiente, no como
+territorios. Descargar el recurso GeoJSON de
+[BA DATA - Colectivos: recorridos](https://data.buenosaires.gob.ar/es_AR/dataset/colectivos-recorridos)
+y guardarlo como:
+
+```text
+data/colectivos_recorridos.geojson
+```
+
+Luego ejecutar:
+
+```powershell
+docker-compose --profile tools run --rm loader python load_transport_routes.py
+```
+
+Para usar otro archivo:
+
+```powershell
+$env:BA_BUS_ROUTES_GEOJSON="/data/mi_archivo.geojson"
+docker-compose --profile tools run --rm loader python load_transport_routes.py
+```
+
+El loader acepta `LineString` y `MultiLineString`, conserva las propiedades
+originales en `metadata`, normaliza campos comunes como `linea`, `recorrido`,
+`sentido`, `desde` y `hasta`, y borra recorridos obsoletos de la misma fuente que
+ya no aparezcan en el archivo cargado.
 
 ## Materialized View de mapa
 
@@ -287,6 +318,7 @@ Endpoints principales:
 - `GET /indicators`
 - `GET /map-data?level=census_radius&indicator=poblacion_total&year=2022`
 - `GET /indicator-values?level=census_radius&indicator=poblacion_total&year=2022`
+- `GET /transport-routes?source=BA%20DATA%20colectivos%20recorridos&lines=10`
 
 `/map-data` acepta `territory_ids` para filtrar territorios. `province_ids` queda
 soportado como alias temporal de compatibilidad.

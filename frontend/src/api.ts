@@ -6,6 +6,7 @@ import type {
   TerritoryLevelId,
   TerritoryLevelsResponse,
   TerritoryOptionsResponse,
+  TransportRouteData,
 } from "./types";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -137,4 +138,25 @@ export async function fetchMapData(
   }
 
   return (await response.json()) as MapData;
+}
+
+export async function fetchTransportRoutes(source?: string, lines: string[] = []) {
+  const searchParams = new URLSearchParams();
+
+  if (source) {
+    searchParams.set("source", source);
+  }
+
+  for (const line of lines) {
+    searchParams.append("lines", line);
+  }
+
+  const query = searchParams.toString();
+  const response = await fetch(`${API_URL}/transport-routes${query ? `?${query}` : ""}`);
+
+  if (!response.ok) {
+    throw new Error("No se pudieron cargar los recorridos de transporte.");
+  }
+
+  return (await response.json()) as TransportRouteData;
 }

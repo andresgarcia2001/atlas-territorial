@@ -133,3 +133,29 @@ def fetch_indicator_values(indicator, year, level=DEFAULT_TERRITORY_LEVEL, terri
         with conn.cursor() as cur:
             cur.execute(query, (indicator, year, level, parent_id, parent_id, territory_ids, territory_ids))
             return cur.fetchall()
+
+
+def fetch_transport_routes(source=None, lines=None):
+    query = """
+        SELECT
+          id,
+          source,
+          route_id,
+          line,
+          branch,
+          direction,
+          service_type,
+          jurisdiction,
+          from_name,
+          to_name,
+          ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.0001), 5)::json AS geometry
+        FROM transport_routes
+        WHERE (%s::text IS NULL OR source = %s)
+          AND (%s::text[] IS NULL OR line = ANY(%s::text[]))
+        ORDER BY line NULLS LAST, branch NULLS LAST, direction NULLS LAST, route_id;
+    """
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (source, source, lines, lines))
+            return cur.fetchall()

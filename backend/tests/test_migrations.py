@@ -120,6 +120,45 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
                     "territory_indicator_map_data_mv_parent_idx",
                 } <= {row[0] for row in cur.fetchall()}
 
+                cur.execute("SELECT to_regclass('public.transport_routes');")
+                assert cur.fetchone()[0] == "transport_routes"
+
+                cur.execute(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name = 'transport_routes';
+                    """
+                )
+                transport_route_columns = {row[0] for row in cur.fetchall()}
+                assert {
+                    "id",
+                    "source",
+                    "route_id",
+                    "line",
+                    "branch",
+                    "direction",
+                    "service_type",
+                    "jurisdiction",
+                    "from_name",
+                    "to_name",
+                    "metadata",
+                    "geom",
+                } <= transport_route_columns
+
+                cur.execute(
+                    """
+                    SELECT indexname
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND tablename = 'transport_routes';
+                    """
+                )
+                assert {
+                    "transport_routes_geom_idx",
+                    "transport_routes_source_line_idx",
+                } <= {row[0] for row in cur.fetchall()}
+
                 cur.execute(
                     """
                     INSERT INTO territories (

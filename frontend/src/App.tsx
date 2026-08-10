@@ -20,6 +20,7 @@ import type {
   TerritoryLevel,
   TerritoryLevelId,
   TerritoryOption,
+  TransportOverlayMode,
   ViewMode,
 } from "./types";
 
@@ -38,6 +39,11 @@ const VIEW_MODE_LABELS: Record<ViewMode, string> = {
 const GEOMETRY_MODE_LABELS: Record<GeometryMode, string> = {
   surface: "Relieve",
   bars: "Barras",
+};
+
+const TRANSPORT_OVERLAY_LABELS: Record<TransportOverlayMode, string> = {
+  none: "Sin transporte",
+  ba_bus_routes: "Colectivos BA",
 };
 
 export function App() {
@@ -348,6 +354,31 @@ export function App() {
           </div>
         </section>
 
+        <section className="control-block" aria-labelledby="overlays-heading">
+          <div className="control-title">
+            <label id="overlays-heading">Overlays</label>
+            <span>{TRANSPORT_OVERLAY_LABELS[draftLayer.transportOverlay]}</span>
+          </div>
+          <div className="segmented" role="group" aria-label="Capas de transporte">
+            <button
+              aria-pressed={draftLayer.transportOverlay === "none"}
+              className={draftLayer.transportOverlay === "none" ? "segment is-active" : "segment"}
+              type="button"
+              onClick={() => updateDraftLayer({ transportOverlay: "none" })}
+            >
+              Ninguno
+            </button>
+            <button
+              aria-pressed={draftLayer.transportOverlay === "ba_bus_routes"}
+              className={draftLayer.transportOverlay === "ba_bus_routes" ? "segment is-active" : "segment"}
+              type="button"
+              onClick={() => updateDraftLayer({ transportOverlay: "ba_bus_routes" })}
+            >
+              Colectivos BA
+            </button>
+          </div>
+        </section>
+
         <button className="apply-button" type="button" disabled={!hasPendingChanges} onClick={applyDraftLayer}>
           Buscar
         </button>
@@ -359,6 +390,7 @@ export function App() {
             Nivel: {selectedAppliedLevel.label} - Color: {COLOR_MODE_LABELS[appliedLayer.colorMode]} - Vista:{" "}
             {VIEW_MODE_LABELS[appliedLayer.viewMode]} - 3D: {GEOMETRY_MODE_LABELS[appliedLayer.geometryMode]}
           </p>
+          <p>Overlay: {TRANSPORT_OVERLAY_LABELS[appliedLayer.transportOverlay]}</p>
           <p>Territorios: {getTerritorySelectionLabel(appliedLayer.territoryIds, appliedTerritoryOptions)}</p>
         </section>
 
@@ -371,6 +403,7 @@ export function App() {
         indicator={appliedLayer.indicator}
         onDataError={setMapError}
         geometryMode={appliedLayer.geometryMode}
+        transportOverlay={appliedLayer.transportOverlay}
         territoryIds={appliedLayer.territoryIds}
         territoryLevel={appliedLayer.territoryLevel}
         viewMode={appliedLayer.viewMode}

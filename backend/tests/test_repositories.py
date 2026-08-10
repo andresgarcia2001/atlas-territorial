@@ -84,3 +84,24 @@ def test_fetch_territories_with_geometry_reads_cached_map_geometry(monkeypatch):
         ["municipio_001"],
         ["municipio_001"],
     )
+
+
+def test_fetch_transport_routes_reads_overlay_table(monkeypatch):
+    cursor = FakeCursor()
+    monkeypatch.setattr(repositories, "get_connection", lambda: FakeConnection(cursor))
+
+    rows = repositories.fetch_transport_routes(
+        source="BA DATA colectivos recorridos",
+        lines=["10", "152"],
+    )
+
+    assert rows == []
+    assert "FROM transport_routes" in cursor.executed_query
+    assert "ST_SimplifyPreserveTopology(geom, 0.0001)" in cursor.executed_query
+    assert "FROM territories" not in cursor.executed_query
+    assert cursor.executed_params == (
+        "BA DATA colectivos recorridos",
+        "BA DATA colectivos recorridos",
+        ["10", "152"],
+        ["10", "152"],
+    )

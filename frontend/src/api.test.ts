@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { fetchIndicatorValues, fetchMapData, fetchTerritories, fetchTerritoryOptions } from "./api";
+import { fetchIndicatorValues, fetchMapData, fetchTerritories, fetchTerritoryOptions, fetchTransportRoutes } from "./api";
 
 
 function mockJsonResponse(body: unknown) {
@@ -96,5 +96,17 @@ describe("api", () => {
     expect(requestedUrl.searchParams.get("level")).toBe("municipality");
     expect(requestedUrl.searchParams.get("parent_id")).toBe("provincia_02");
     expect(requestedUrl.searchParams.getAll("territory_ids")).toEqual(["municipio_001", "municipio_002"]);
+  });
+
+  it("builds transport route requests with source and repeated lines", async () => {
+    const fetchMock = vi.fn<typeof fetch>(() => mockJsonResponse({ type: "FeatureCollection", features: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchTransportRoutes("BA DATA colectivos recorridos", ["10", "152"]);
+
+    const requestedUrl = getRequestedUrl(fetchMock);
+    expect(requestedUrl.pathname).toBe("/transport-routes");
+    expect(requestedUrl.searchParams.get("source")).toBe("BA DATA colectivos recorridos");
+    expect(requestedUrl.searchParams.getAll("lines")).toEqual(["10", "152"]);
   });
 });

@@ -9,6 +9,7 @@ from repositories import (
     fetch_indicator_names,
     fetch_indicator_values,
     fetch_map_data,
+    fetch_transport_routes,
     fetch_territory_levels,
     fetch_territories_with_geometry,
     fetch_territory_options,
@@ -211,5 +212,48 @@ def get_indicator_values(
                 "value": value,
             }
             for territory_id, value in rows
+        ],
+    }
+
+
+@app.get("/transport-routes")
+def get_transport_routes(
+    source: str | None = None,
+    lines: list[str] | None = Query(default=None),
+):
+    rows = fetch_transport_routes(source, lines)
+
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": {
+                    "id": route_id,
+                    "source": source_name,
+                    "route_id": external_route_id,
+                    "line": line,
+                    "branch": branch,
+                    "direction": direction,
+                    "service_type": service_type,
+                    "jurisdiction": jurisdiction,
+                    "from_name": from_name,
+                    "to_name": to_name,
+                },
+                "geometry": geometry,
+            }
+            for (
+                route_id,
+                source_name,
+                external_route_id,
+                line,
+                branch,
+                direction,
+                service_type,
+                jurisdiction,
+                from_name,
+                to_name,
+                geometry,
+            ) in rows
         ],
     }
