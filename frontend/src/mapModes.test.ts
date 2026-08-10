@@ -1,11 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import { getCameraPreset, getEffectiveGeometryMode, getLayerVisibility } from "./mapModes";
+import {
+  getCameraPreset,
+  getEffectiveGeometryMode,
+  getLayerVisibility,
+  getTransportCameraPreset,
+  getTransportVisualMode,
+} from "./mapModes";
 
 describe("mapModes", () => {
   it("keeps camera concerns separate from geometry style", () => {
     expect(getCameraPreset("flat")).toMatchObject({ pitch: 0, bearing: 0 });
     expect(getCameraPreset("extruded")).toMatchObject({ pitch: 45, bearing: -18 });
+  });
+
+  it("uses a neon transport style only in 3D view", () => {
+    expect(getTransportVisualMode("flat")).toBe("standard");
+    expect(getTransportVisualMode("extruded")).toBe("neon");
+    expect(getTransportCameraPreset("flat")).toMatchObject({ pitch: 0, bearing: 0 });
+    expect(getTransportCameraPreset("extruded")).toMatchObject({ pitch: 58, bearing: -24 });
   });
 
   it("falls back to surface extrusion when bar geometry is not available", () => {

@@ -148,7 +148,7 @@ def fetch_transport_routes(source=None, lines=None):
           jurisdiction,
           from_name,
           to_name,
-          ST_AsGeoJSON(ST_SimplifyPreserveTopology(geom, 0.0001), 5)::json AS geometry
+          ST_AsGeoJSON(ST_Multi(ST_SimplifyPreserveTopology(geom, 0.0001)), 5)::json AS geometry
         FROM transport_routes
         WHERE (%s::text IS NULL OR source = %s)
           AND (%s::text[] IS NULL OR line = ANY(%s::text[]))

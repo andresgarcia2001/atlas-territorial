@@ -4,7 +4,13 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import { fetchIndicatorValues, fetchTerritories, fetchTransportRoutes } from "../api";
 import { getIndicatorLabel } from "../indicatorCatalog";
-import { getCameraPreset, getLayerVisibility } from "../mapModes";
+import {
+  getCameraPreset,
+  getLayerVisibility,
+  getTransportCameraPreset,
+  getTransportVisualMode,
+  type TransportVisualMode,
+} from "../mapModes";
 import type {
   ColorMode,
   GeometryMode,
@@ -13,6 +19,7 @@ import type {
   MapData,
   MapFeature,
   TerritoryData,
+  TransportRouteGeometry,
   TransportRouteData,
   TransportRouteFeature,
   ViewMode,
@@ -59,6 +66,8 @@ const MIN_LATITUDE = -90;
 const MAX_LATITUDE = 90;
 const TERRITORY_SOURCE_ID = "territories";
 const TERRITORY_BARS_SOURCE_ID = "territory-bars";
+const TRANSPORT_NIGHT_MASK_SOURCE_ID = "transport-night-mask";
+const TRANSPORT_NIGHT_MASK_LAYER_ID = "transport-night-mask";
 const TRANSPORT_ROUTES_SOURCE_ID = "transport-routes";
 const BA_BUS_ROUTES_SOURCE = "BA DATA colectivos recorridos";
 const INTERACTIVE_TERRITORY_LAYER_IDS = [
@@ -67,7 +76,12 @@ const INTERACTIVE_TERRITORY_LAYER_IDS = [
   "territory-bars-fill",
   "territory-bars-extrusion",
 ];
-const TRANSPORT_ROUTE_LAYER_IDS = ["transport-routes-casing", "transport-routes-line"];
+const TRANSPORT_NEON_LAYER_IDS = ["transport-routes-neon-aura", "transport-routes-neon-glow"];
+const TRANSPORT_ROUTE_LAYER_IDS = [
+  ...TRANSPORT_NEON_LAYER_IDS,
+  "transport-routes-casing",
+  "transport-routes-line",
+];
 
 const TERRITORY_COLORS = [
   "#22c55e",
@@ -97,19 +111,41 @@ const TERRITORY_COLORS = [
 ];
 
 const TRANSPORT_ROUTE_COLORS = [
-  "#2563eb",
-  "#f97316",
-  "#16a34a",
-  "#dc2626",
-  "#9333ea",
-  "#0891b2",
-  "#ca8a04",
-  "#db2777",
-  "#4f46e5",
-  "#0f766e",
-  "#b45309",
-  "#be123c",
+  "#00e5ff",
+  "#ff2bd6",
+  "#7cff00",
+  "#ffb000",
+  "#8b5cf6",
+  "#00ffa3",
+  "#ff3864",
+  "#2d7dff",
+  "#faff00",
+  "#ff7a00",
+  "#39ff14",
+  "#ff4d6d",
 ];
+
+const TRANSPORT_NIGHT_MASK_DATA = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: {},
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [-180, -85],
+            [180, -85],
+            [180, 85],
+            [-180, 85],
+            [-180, -85],
+          ],
+        ],
+      },
+    },
+  ],
+} satisfies GeoJSON.FeatureCollection<GeoJSON.Polygon>;
 
 function getTerritoryFilterKey(territoryIds: string[]) {
   return territoryIds.length === 0 ? "all" : territoryIds.join("|");
@@ -355,7 +391,24 @@ function fitMapToData(map: maplibregl.Map, data: MapData) {
   }
 }
 
-function fitMapToTransportRoutes(map: maplibregl.Map, data: TransportRouteData) {
+function forEachTransportRoutePosition(
+  geometry: TransportRouteGeometry,
+  callback: (position: [number, number]) => void,
+) {
+  const lines = geometry.type === "LineString" ? [geometry.coordinates] : geometry.coordinates;
+
+  for (const line of lines) {
+    for (const position of line) {
+      callback([position[0], position[1]]);
+    }
+  }
+}
+
+function fitMapToTransportRoutes(
+  map: maplibregl.Map,
+  data: TransportRouteData,
+  transportVisualMode: TransportVisualMode,
+) {
   if (data.features.length === 0) {
     return;
   }
@@ -363,15 +416,19 @@ function fitMapToTransportRoutes(map: maplibregl.Map, data: TransportRouteData) 
   const bounds = new maplibregl.LngLatBounds();
 
   for (const feature of data.features) {
-    for (const line of feature.geometry.coordinates) {
-      for (const position of line) {
-        bounds.extend([position[0], position[1]]);
-      }
-    }
+    forEachTransportRoutePosition(feature.geometry, (position) => bounds.extend(position));
   }
 
   if (!bounds.isEmpty()) {
-    map.fitBounds(bounds, { padding: 72, duration: 450 });
+    const cameraPreset =
+      transportVisualMode === "neon" ? getTransportCameraPreset("extruded") : getTransportCameraPreset("flat");
+
+    map.fitBounds(bounds, {
+      ...cameraPreset,
+      linear: transportVisualMode === "neon",
+      maxZoom: transportVisualMode === "neon" ? 12.2 : 13,
+      padding: 72,
+    });
   }
 }
 
@@ -594,15 +651,104 @@ function getTransportRoutePopupHtml(feature: TransportRouteFeature) {
   `;
 }
 
-function setTransportRouteVisibility(map: maplibregl.Map, isVisible: boolean) {
+function ensureTransportNightMaskLayer(map: maplibregl.Map) {
+  if (!map.getSource(TRANSPORT_NIGHT_MASK_SOURCE_ID)) {
+    map.addSource(TRANSPORT_NIGHT_MASK_SOURCE_ID, {
+      type: "geojson",
+      data: TRANSPORT_NIGHT_MASK_DATA,
+    });
+  }
+
+  if (map.getLayer(TRANSPORT_NIGHT_MASK_LAYER_ID)) {
+    return;
+  }
+
+  map.addLayer({
+    id: TRANSPORT_NIGHT_MASK_LAYER_ID,
+    type: "fill",
+    source: TRANSPORT_NIGHT_MASK_SOURCE_ID,
+    layout: {
+      visibility: "none",
+    },
+    paint: {
+      "fill-color": "#06111e",
+      "fill-opacity": 0.58,
+    },
+  });
+}
+
+function setTransportNightMaskVisibility(map: maplibregl.Map, isVisible: boolean) {
+  if (map.getLayer(TRANSPORT_NIGHT_MASK_LAYER_ID)) {
+    map.setLayoutProperty(TRANSPORT_NIGHT_MASK_LAYER_ID, "visibility", isVisible ? "visible" : "none");
+  }
+}
+
+function updateTransportRoutePaint(map: maplibregl.Map, transportVisualMode: TransportVisualMode) {
+  const isNeon = transportVisualMode === "neon";
+
+  if (map.getLayer("transport-routes-neon-aura")) {
+    map.setPaintProperty("transport-routes-neon-aura", "line-opacity", isNeon ? 0.2 : 0);
+    map.setPaintProperty("transport-routes-neon-aura", "line-blur", isNeon ? 14 : 0);
+    map.setPaintProperty(
+      "transport-routes-neon-aura",
+      "line-width",
+      ["interpolate", ["linear"], ["zoom"], 5, isNeon ? 9 : 0, 10, isNeon ? 24 : 0, 14, isNeon ? 40 : 0] as never,
+    );
+  }
+
+  if (map.getLayer("transport-routes-neon-glow")) {
+    map.setPaintProperty("transport-routes-neon-glow", "line-opacity", isNeon ? 0.58 : 0);
+    map.setPaintProperty("transport-routes-neon-glow", "line-blur", isNeon ? 5 : 0);
+    map.setPaintProperty(
+      "transport-routes-neon-glow",
+      "line-width",
+      ["interpolate", ["linear"], ["zoom"], 5, isNeon ? 4.5 : 0, 10, isNeon ? 12 : 0, 14, isNeon ? 22 : 0] as never,
+    );
+  }
+
+  if (map.getLayer("transport-routes-casing")) {
+    map.setPaintProperty("transport-routes-casing", "line-color", isNeon ? "#020817" : "#111816");
+    map.setPaintProperty("transport-routes-casing", "line-opacity", isNeon ? 0.78 : 0.62);
+    map.setPaintProperty(
+      "transport-routes-casing",
+      "line-width",
+      ["interpolate", ["linear"], ["zoom"], 5, isNeon ? 2 : 1.5, 10, isNeon ? 5 : 4, 14, isNeon ? 10 : 9] as never,
+    );
+  }
+
+  if (map.getLayer("transport-routes-line")) {
+    map.setPaintProperty("transport-routes-line", "line-opacity", isNeon ? 0.98 : 0.92);
+    map.setPaintProperty(
+      "transport-routes-line",
+      "line-width",
+      ["interpolate", ["linear"], ["zoom"], 5, isNeon ? 1.8 : 1, 10, isNeon ? 4.2 : 2.5, 14, isNeon ? 8 : 6] as never,
+    );
+  }
+}
+
+function setTransportRouteVisibility(
+  map: maplibregl.Map,
+  isVisible: boolean,
+  transportVisualMode: TransportVisualMode,
+) {
+  const isNeon = transportVisualMode === "neon";
+
+  setTransportNightMaskVisibility(map, isVisible && isNeon);
+
   for (const layerId of TRANSPORT_ROUTE_LAYER_IDS) {
     if (map.getLayer(layerId)) {
-      map.setLayoutProperty(layerId, "visibility", isVisible ? "visible" : "none");
+      const shouldShowLayer = isVisible && (isNeon || !TRANSPORT_NEON_LAYER_IDS.includes(layerId));
+
+      map.setLayoutProperty(layerId, "visibility", shouldShowLayer ? "visible" : "none");
     }
   }
 }
 
-function moveTransportRouteLayersToTop(map: maplibregl.Map) {
+function moveTransportVisualLayersToTop(map: maplibregl.Map) {
+  if (map.getLayer(TRANSPORT_NIGHT_MASK_LAYER_ID)) {
+    map.moveLayer(TRANSPORT_NIGHT_MASK_LAYER_ID);
+  }
+
   for (const layerId of TRANSPORT_ROUTE_LAYER_IDS) {
     if (map.getLayer(layerId)) {
       map.moveLayer(layerId);
@@ -611,9 +757,45 @@ function moveTransportRouteLayersToTop(map: maplibregl.Map) {
 }
 
 function addTransportRouteLayers(map: maplibregl.Map, data: TransportRouteData) {
+  ensureTransportNightMaskLayer(map);
+
   map.addSource(TRANSPORT_ROUTES_SOURCE_ID, {
     type: "geojson",
     data,
+  });
+
+  map.addLayer({
+    id: "transport-routes-neon-aura",
+    type: "line",
+    source: TRANSPORT_ROUTES_SOURCE_ID,
+    layout: {
+      "line-cap": "round",
+      "line-join": "round",
+      visibility: "none",
+    },
+    paint: {
+      "line-blur": 14,
+      "line-color": ["coalesce", ["get", "route_color"], "#00e5ff"] as never,
+      "line-opacity": 0.2,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 9, 10, 24, 14, 40] as never,
+    },
+  });
+
+  map.addLayer({
+    id: "transport-routes-neon-glow",
+    type: "line",
+    source: TRANSPORT_ROUTES_SOURCE_ID,
+    layout: {
+      "line-cap": "round",
+      "line-join": "round",
+      visibility: "none",
+    },
+    paint: {
+      "line-blur": 5,
+      "line-color": ["coalesce", ["get", "route_color"], "#00e5ff"] as never,
+      "line-opacity": 0.58,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 5, 4.5, 10, 12, 14, 22] as never,
+    },
   });
 
   map.addLayer({
@@ -640,7 +822,7 @@ function addTransportRouteLayers(map: maplibregl.Map, data: TransportRouteData) 
       "line-join": "round",
     },
     paint: {
-      "line-color": ["coalesce", ["get", "route_color"], "#2563eb"] as never,
+      "line-color": ["coalesce", ["get", "route_color"], "#00e5ff"] as never,
       "line-opacity": 0.92,
       "line-width": ["interpolate", ["linear"], ["zoom"], 5, 1, 10, 2.5, 14, 6] as never,
     },
@@ -672,6 +854,7 @@ function renderTransportRouteData(
   data: TransportRouteData,
   isVisible: boolean,
   shouldFitMap: boolean,
+  transportVisualMode: TransportVisualMode,
 ) {
   const source = map.getSource(TRANSPORT_ROUTES_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
 
@@ -681,11 +864,14 @@ function renderTransportRouteData(
     addTransportRouteLayers(map, data);
   }
 
-  setTransportRouteVisibility(map, isVisible);
-  moveTransportRouteLayersToTop(map);
+  updateTransportRoutePaint(map, transportVisualMode);
+  setTransportRouteVisibility(map, isVisible, transportVisualMode);
+  moveTransportVisualLayersToTop(map);
 
   if (isVisible && shouldFitMap) {
-    fitMapToTransportRoutes(map, data);
+    fitMapToTransportRoutes(map, data, transportVisualMode);
+  } else if (isVisible) {
+    map.easeTo(getTransportCameraPreset(transportVisualMode === "neon" ? "extruded" : "flat"));
   }
 }
 
@@ -719,7 +905,7 @@ function renderTerritoryData(
     hasBarGeometry(loadedData),
     layerSettings.territoryLayerMode === "visible",
   );
-  moveTransportRouteLayersToTop(map);
+  moveTransportVisualLayersToTop(map);
 }
 
 export function MapView({
@@ -738,6 +924,7 @@ export function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const loadedTerritoryDataRef = useRef<LoadedTerritoryData | null>(null);
   const loadedIndicatorValuesRef = useRef<LoadedIndicatorValues | null>(null);
+  const loadedTransportRouteDataRef = useRef<TransportRouteData | null>(null);
   const renderedDataRef = useRef<LoadedMapData | null>(null);
   const latestLayerSettingsRef = useRef<LayerSettings>({
     colorMode,
@@ -752,6 +939,7 @@ export function MapView({
   const lastFitKeyRef = useRef<string | null>(null);
   const [legend, setLegend] = useState<LegendState | null>(null);
   const territoryKey = useMemo(() => getTerritoryFilterKey(territoryIds), [territoryIds]);
+  const transportVisualMode = useMemo(() => getTransportVisualMode(viewMode), [viewMode]);
 
   latestLayerSettingsRef.current = {
     colorMode,
@@ -954,7 +1142,28 @@ export function MapView({
     let isCancelled = false;
 
     if (transportOverlay !== "ba_bus_routes") {
-      setTransportRouteVisibility(mapInstance, false);
+      setTransportRouteVisibility(mapInstance, false, transportVisualMode);
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    function applyTransportData(data: TransportRouteData, shouldFitMap: boolean) {
+      const applyData = () => {
+        if (!isCancelled) {
+          renderTransportRouteData(mapInstance, data, true, shouldFitMap, transportVisualMode);
+        }
+      };
+
+      if (mapInstance.loaded()) {
+        applyData();
+      } else {
+        mapInstance.once("load", applyData);
+      }
+    }
+
+    if (loadedTransportRouteDataRef.current) {
+      applyTransportData(loadedTransportRouteDataRef.current, false);
       return () => {
         isCancelled = true;
       };
@@ -968,15 +1177,8 @@ export function MapView({
           return;
         }
 
-        const applyData = () => {
-          renderTransportRouteData(mapInstance, data, true, true);
-        };
-
-        if (mapInstance.loaded()) {
-          applyData();
-        } else {
-          mapInstance.once("load", applyData);
-        }
+        loadedTransportRouteDataRef.current = data;
+        applyTransportData(data, true);
       } catch (caughtError) {
         if (!isCancelled) {
           onDataError?.(
@@ -991,7 +1193,7 @@ export function MapView({
     return () => {
       isCancelled = true;
     };
-  }, [onDataError, transportOverlay]);
+  }, [onDataError, transportOverlay, transportVisualMode]);
 
   useEffect(() => {
     const map = mapRef.current;

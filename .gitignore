@@ -9,3 +9,4 @@ __pycache__/
 .docker-cli/
 .env
 data/municipios_ign.geojson
+data/colectivos_recorridos.geojson

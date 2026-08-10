@@ -35,6 +35,13 @@ export type MultiLineStringGeometry = {
   coordinates: number[][][];
 };
 
+export type LineStringGeometry = {
+  type: "LineString";
+  coordinates: number[][];
+};
+
+export type TransportRouteGeometry = LineStringGeometry | MultiLineStringGeometry;
+
 export type PointGeometry = {
   type: "Point";
   coordinates: [number, number];
@@ -109,7 +116,7 @@ export type TransportRouteProperties = {
 export type TransportRouteFeature = {
   type: "Feature";
   properties: TransportRouteProperties;
-  geometry: MultiLineStringGeometry;
+  geometry: TransportRouteGeometry;
 };
 
 export type TransportRouteData = {

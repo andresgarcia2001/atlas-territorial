@@ -6,6 +6,8 @@ export type CameraPreset = {
   duration: number;
 };
 
+export type TransportVisualMode = "standard" | "neon";
+
 export type LayerVisibility = {
   fill: "visible" | "none";
   outline: "visible" | "none";
@@ -31,6 +33,22 @@ export function getCameraPreset(viewMode: ViewMode): CameraPreset {
     bearing: 0,
     duration: CAMERA_DURATION_MS,
   };
+}
+
+export function getTransportVisualMode(viewMode: ViewMode): TransportVisualMode {
+  return viewMode === "extruded" ? "neon" : "standard";
+}
+
+export function getTransportCameraPreset(viewMode: ViewMode): CameraPreset {
+  if (viewMode === "extruded") {
+    return {
+      pitch: 58,
+      bearing: -24,
+      duration: 450,
+    };
+  }
+
+  return getCameraPreset("flat");
 }
 
 export function getEffectiveGeometryMode(
