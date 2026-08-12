@@ -95,6 +95,8 @@ const TRANSPORT_ROUTE_LAYER_IDS = [
   "transport-routes-casing",
   "transport-routes-line",
 ];
+const WEBGL_UNAVAILABLE_MESSAGE =
+  "No se pudo iniciar el mapa porque WebGL no esta disponible en este navegador. Revisar la aceleracion por hardware de Firefox o probar con otro navegador.";
 
 const TERRITORY_COLORS = [
   "#22c55e",
@@ -1002,6 +1004,7 @@ export function MapView({
   const lastFitKeyRef = useRef<string | null>(null);
   const lastTransportFitKeyRef = useRef<string | null>(null);
   const [legend, setLegend] = useState<LegendState | null>(null);
+  const [mapInitializationError, setMapInitializationError] = useState<string | null>(null);
   const territoryKey = useMemo(() => getTerritoryFilterKey(territoryIds), [territoryIds]);
   const transportLineKey = useMemo(() => getTransportRouteLineKey(transportRouteLines), [transportRouteLines]);
   const transportColorLineKey = useMemo(
@@ -1054,44 +1057,56 @@ export function MapView({
   }
 
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) {
+    if (!containerRef.current || mapRef.current || mapInitializationError) {
       return;
     }
 
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: {
-        version: 8,
-        sources: {
-          osm: {
-            type: "raster",
-            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "OpenStreetMap contributors",
-          },
-        },
-        layers: [
-          {
-            id: "osm",
-            type: "raster",
-            source: "osm",
-          },
-        ],
-      },
-      center: [-64, -40],
-      zoom: 3.6,
-      pitch: 0,
-      bearing: 0,
-    });
+    let map: maplibregl.Map | null = null;
 
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    try {
+      map = new maplibregl.Map({
+        container: containerRef.current,
+        style: {
+          version: 8,
+          sources: {
+            osm: {
+              type: "raster",
+              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+              tileSize: 256,
+              attribution: "OpenStreetMap contributors",
+            },
+          },
+          layers: [
+            {
+              id: "osm",
+              type: "raster",
+              source: "osm",
+            },
+          ],
+        },
+        center: [-64, -40],
+        zoom: 3.6,
+        pitch: 0,
+        bearing: 0,
+      });
+
+      map.addControl(new maplibregl.NavigationControl(), "top-right");
+    } catch {
+      map?.remove();
+      setLegend(null);
+      setMapInitializationError(WEBGL_UNAVAILABLE_MESSAGE);
+      onDataError?.(WEBGL_UNAVAILABLE_MESSAGE);
+      return;
+    }
+
     mapRef.current = map;
+    setMapInitializationError(null);
 
     return () => {
       map.remove();
       mapRef.current = null;
     };
-  }, []);
+  }, [mapInitializationError, onDataError]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1337,6 +1352,12 @@ export function MapView({
   return (
     <main className="map-shell" aria-label="Mapa de indicadores territoriales">
       <div id="map" ref={containerRef} />
+      {mapInitializationError && (
+        <section className="map-fallback" role="status">
+          <strong>Mapa no disponible</strong>
+          <p>{mapInitializationError}</p>
+        </section>
+      )}
       {legend && (
         <aside className="map-legend" aria-label="Leyenda del mapa">
           <span>{legend.label}</span>
