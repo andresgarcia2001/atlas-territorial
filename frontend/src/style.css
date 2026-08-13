@@ -164,6 +164,31 @@ button {
   grid-template-columns: 1fr;
 }
 
+.parent-territory-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 192px;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.territory-search {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 11px;
+  color: #1f2b26;
+  background: #ffffff;
+  border: 1px solid #d7e0da;
+  border-radius: 8px;
+  outline: none;
+}
+
+.territory-search:focus {
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.1);
+}
+
 .territory-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -493,6 +518,7 @@ button {
   }
 
   .indicator-list,
+  .parent-territory-list,
   .territory-list,
   .transport-line-list {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -506,6 +532,7 @@ button {
 
   .control-grid,
   .indicator-list,
+  .parent-territory-list,
   .territory-list,
   .transport-line-list,
   .territory-level-list {

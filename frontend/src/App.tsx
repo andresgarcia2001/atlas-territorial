@@ -9,11 +9,14 @@ import {
   areLayerSettingsEqual,
   getDefaultIndicator,
   getDefaultColorMode,
+  getDefaultTerritoryParentId,
   getInitialLayerSettings,
   getInitialTerritoryLevel,
+  getTerritoryOptionsKey,
   getTerritoryLevelsOrFallback,
   getTerritorySelectionLabel,
   getTransportRouteLineSelectionLabel,
+  shouldUseParentTerritoryFilter,
 } from "./territoryMetadata";
 import {
   compareTransportRouteLines,
@@ -61,15 +64,25 @@ const TRANSPORT_OVERLAY_LABELS: Record<TransportOverlayMode, string> = {
   ba_bus_routes: "Colectivos BA",
 };
 
+const MAX_VISIBLE_TERRITORY_OPTIONS = 240;
+const EMPTY_TERRITORY_OPTIONS: TerritoryOption[] = [];
+
+function normalizeSearchText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 export function App() {
   const [indicatorsByLevel, setIndicatorsByLevel] = useState<Partial<Record<TerritoryLevelId, string[]>>>({});
   const [territoryLevels, setTerritoryLevels] = useState<TerritoryLevel[]>(FALLBACK_TERRITORY_LEVELS);
-  const [territoryOptionsByLevel, setTerritoryOptionsByLevel] = useState<
-    Partial<Record<TerritoryLevelId, TerritoryOption[]>>
-  >({});
+  const [territoryOptionsByKey, setTerritoryOptionsByKey] = useState<Record<string, TerritoryOption[]>>({});
   const [transportRouteLines, setTransportRouteLines] = useState<TransportRouteLineOption[]>([]);
   const [draftLayer, setDraftLayer] = useState<LayerSettings>(DEFAULT_LAYER_SETTINGS);
   const [appliedLayer, setAppliedLayer] = useState<LayerSettings>(DEFAULT_LAYER_SETTINGS);
+  const [territorySearch, setTerritorySearch] = useState("");
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
@@ -88,8 +101,27 @@ export function App() {
     territoryLevels.find((level) => level.id === draftLayer.territoryLevel) ?? FALLBACK_TERRITORY_LEVELS[0];
   const selectedAppliedLevel =
     territoryLevels.find((level) => level.id === appliedLayer.territoryLevel) ?? FALLBACK_TERRITORY_LEVELS[0];
-  const territoryOptions = territoryOptionsByLevel[draftLayer.territoryLevel] ?? [];
-  const appliedTerritoryOptions = territoryOptionsByLevel[appliedLayer.territoryLevel] ?? [];
+  const parentTerritoryOptions = territoryOptionsByKey[getTerritoryOptionsKey("province")] ?? EMPTY_TERRITORY_OPTIONS;
+  const shouldShowParentTerritoryFilter = shouldUseParentTerritoryFilter(draftLayer.territoryLevel);
+  const selectedDraftParentTerritory = parentTerritoryOptions.find(
+    (territory) => territory.id === draftLayer.territoryParentId,
+  );
+  const selectedAppliedParentTerritory = parentTerritoryOptions.find(
+    (territory) => territory.id === appliedLayer.territoryParentId,
+  );
+  const territoryOptionsKey = getTerritoryOptionsKey(draftLayer.territoryLevel, draftLayer.territoryParentId);
+  const appliedTerritoryOptionsKey = getTerritoryOptionsKey(
+    appliedLayer.territoryLevel,
+    appliedLayer.territoryParentId,
+  );
+  const territoryOptions = territoryOptionsByKey[territoryOptionsKey] ?? EMPTY_TERRITORY_OPTIONS;
+  const appliedTerritoryOptions = territoryOptionsByKey[appliedTerritoryOptionsKey] ?? EMPTY_TERRITORY_OPTIONS;
+  const normalizedTerritorySearch = normalizeSearchText(territorySearch);
+  const filteredTerritoryOptions = normalizedTerritorySearch
+    ? territoryOptions.filter((territory) => normalizeSearchText(territory.name).includes(normalizedTerritorySearch))
+    : territoryOptions;
+  const visibleTerritoryOptions = filteredTerritoryOptions.slice(0, MAX_VISIBLE_TERRITORY_OPTIONS);
+  const hiddenTerritoryOptionCount = Math.max(0, filteredTerritoryOptions.length - visibleTerritoryOptions.length);
   const availableTransportRouteLines = useMemo(
     () => transportRouteLines.map((routeLine) => routeLine.line),
     [transportRouteLines],
@@ -102,6 +134,7 @@ export function App() {
     [availableTransportRouteLines, draftLayer.transportRouteLines],
   );
   const hasPendingChanges = !areLayerSettingsEqual(draftLayer, appliedLayer);
+  const isMissingRequiredParentTerritory = shouldShowParentTerritoryFilter && !draftLayer.territoryParentId;
 
   useEffect(() => {
     async function loadInitialMetadata() {
@@ -116,7 +149,9 @@ export function App() {
 
         setTerritoryLevels(levels);
         setIndicatorsByLevel({ [initialTerritoryLevel]: loadedIndicators });
-        setTerritoryOptionsByLevel({ [initialTerritoryLevel]: loadedTerritories });
+        setTerritoryOptionsByKey({
+          [getTerritoryOptionsKey(initialTerritoryLevel)]: loadedTerritories,
+        });
         setDraftLayer(initialLayer);
         setAppliedLayer(initialLayer);
         setMetadataError(null);
@@ -130,20 +165,48 @@ export function App() {
 
   useEffect(() => {
     let isCancelled = false;
+    const level = draftLayer.territoryLevel;
+    const parentId = shouldUseParentTerritoryFilter(level) ? draftLayer.territoryParentId : null;
+    const optionsKey = getTerritoryOptionsKey(level, parentId);
 
-    Promise.all([fetchIndicators(draftLayer.territoryLevel), fetchTerritoryOptions(draftLayer.territoryLevel)])
+    if (shouldUseParentTerritoryFilter(level) && !parentId) {
+      fetchIndicators(level)
+        .then((loadedIndicators) => {
+          if (!isCancelled) {
+            setIndicatorsByLevel((currentIndicators) => ({
+              ...currentIndicators,
+              [level]: loadedIndicators,
+            }));
+            setTerritoryOptionsByKey((currentOptions) => ({
+              ...currentOptions,
+              [optionsKey]: EMPTY_TERRITORY_OPTIONS,
+            }));
+          }
+        })
+        .catch((caughtError: Error) => {
+          if (!isCancelled) {
+            setMetadataError(caughtError.message);
+          }
+        });
+
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    Promise.all([fetchIndicators(level), fetchTerritoryOptions(level, parentId)])
       .then(([loadedIndicators, loadedTerritories]) => {
         if (!isCancelled) {
           setIndicatorsByLevel((currentIndicators) => ({
             ...currentIndicators,
-            [draftLayer.territoryLevel]: loadedIndicators,
+            [level]: loadedIndicators,
           }));
-          setTerritoryOptionsByLevel((currentOptions) => ({
+          setTerritoryOptionsByKey((currentOptions) => ({
             ...currentOptions,
-            [draftLayer.territoryLevel]: loadedTerritories,
+            [optionsKey]: loadedTerritories,
           }));
           setDraftLayer((currentLayer) => {
-            if (currentLayer.territoryLevel !== draftLayer.territoryLevel) {
+            if (currentLayer.territoryLevel !== level) {
               return currentLayer;
             }
 
@@ -169,7 +232,20 @@ export function App() {
     return () => {
       isCancelled = true;
     };
-  }, [draftLayer.territoryLevel]);
+  }, [draftLayer.territoryLevel, draftLayer.territoryParentId]);
+
+  useEffect(() => {
+    if (
+      shouldUseParentTerritoryFilter(draftLayer.territoryLevel) &&
+      !draftLayer.territoryParentId &&
+      parentTerritoryOptions.length > 0
+    ) {
+      updateDraftLayer({
+        territoryParentId: parentTerritoryOptions[0].id,
+        territoryIds: [],
+      });
+    }
+  }, [draftLayer.territoryLevel, draftLayer.territoryParentId, parentTerritoryOptions]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -200,10 +276,22 @@ export function App() {
   }
 
   function updateTerritoryLevel(territoryLevel: TerritoryLevelId) {
+    const territoryParentId = getDefaultTerritoryParentId(territoryLevel, parentTerritoryOptions);
+
     updateDraftLayer({
       territoryLevel,
+      territoryParentId,
       territoryIds: [],
     });
+    setTerritorySearch("");
+  }
+
+  function updateTerritoryParent(territoryParentId: string) {
+    updateDraftLayer({
+      territoryParentId,
+      territoryIds: [],
+    });
+    setTerritorySearch("");
   }
 
   function toggleTerritory(territoryId: string) {
@@ -242,7 +330,7 @@ export function App() {
   }
 
   function applyDraftLayer() {
-    if (!hasPendingChanges) {
+    if (!hasPendingChanges || isMissingRequiredParentTerritory) {
       return;
     }
 
@@ -310,11 +398,46 @@ export function App() {
           </div>
         </section>
 
+        {shouldShowParentTerritoryFilter && (
+          <section className="control-block" aria-labelledby="parent-territory-heading">
+            <div className="control-title">
+              <label id="parent-territory-heading">Provincia</label>
+              <span>{selectedDraftParentTerritory?.name ?? "Seleccionar"}</span>
+            </div>
+
+            <div className="parent-territory-list">
+              {parentTerritoryOptions.map((territory) => (
+                <button
+                  aria-pressed={territory.id === draftLayer.territoryParentId}
+                  className={
+                    territory.id === draftLayer.territoryParentId ? "territory-button is-active" : "territory-button"
+                  }
+                  key={territory.id}
+                  type="button"
+                  onClick={() => updateTerritoryParent(territory.id)}
+                >
+                  {territory.name}
+                </button>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="control-block" aria-labelledby="territory-heading">
           <div className="control-title">
             <label id="territory-heading">Territorios</label>
             <span>{getTerritorySelectionLabel(draftLayer.territoryIds, territoryOptions)}</span>
           </div>
+
+          {territoryOptions.length > 24 && (
+            <input
+              aria-label="Buscar territorio"
+              className="territory-search"
+              type="search"
+              value={territorySearch}
+              onChange={(event) => setTerritorySearch(event.target.value)}
+            />
+          )}
 
           <div className="territory-actions">
             <button
@@ -327,7 +450,7 @@ export function App() {
           </div>
 
           <div className="territory-list">
-            {territoryOptions.map((territory) => (
+            {visibleTerritoryOptions.map((territory) => (
               <button
                 aria-pressed={draftLayer.territoryIds.includes(territory.id)}
                 className={
@@ -340,6 +463,9 @@ export function App() {
                 {territory.name}
               </button>
             ))}
+            {hiddenTerritoryOptionCount > 0 && (
+              <p className="empty-state">{`${visibleTerritoryOptions.length} de ${filteredTerritoryOptions.length}`}</p>
+            )}
           </div>
         </section>
 
@@ -516,7 +642,12 @@ export function App() {
           )}
         </section>
 
-        <button className="apply-button" type="button" disabled={!hasPendingChanges} onClick={applyDraftLayer}>
+        <button
+          className="apply-button"
+          type="button"
+          disabled={!hasPendingChanges || isMissingRequiredParentTerritory}
+          onClick={applyDraftLayer}
+        >
           Buscar
         </button>
 
@@ -531,6 +662,9 @@ export function App() {
           <p>Overlay: {TRANSPORT_OVERLAY_LABELS[appliedLayer.transportOverlay]}</p>
           {appliedLayer.transportOverlay === "ba_bus_routes" && (
             <p>Líneas: {getTransportRouteLineSelectionLabel(appliedLayer.transportRouteLines)}</p>
+          )}
+          {shouldUseParentTerritoryFilter(appliedLayer.territoryLevel) && selectedAppliedParentTerritory && (
+            <p>Provincia: {selectedAppliedParentTerritory.name}</p>
           )}
           <p>Territorios: {getTerritorySelectionLabel(appliedLayer.territoryIds, appliedTerritoryOptions)}</p>
         </section>
@@ -550,6 +684,7 @@ export function App() {
         transportRouteLines={appliedLayer.transportRouteLines}
         territoryIds={appliedLayer.territoryIds}
         territoryLevel={appliedLayer.territoryLevel}
+        territoryParentId={appliedLayer.territoryParentId}
         viewMode={appliedLayer.viewMode}
         year={YEAR}
       />

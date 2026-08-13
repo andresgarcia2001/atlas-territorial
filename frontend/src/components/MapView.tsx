@@ -41,6 +41,7 @@ type StyleExpression = unknown[];
 
 type LoadedTerritoryData = {
   data: TerritoryData;
+  territoryParentKey: string;
   territoryKey: string;
   territoryLevel: string;
 };
@@ -48,6 +49,7 @@ type LoadedTerritoryData = {
 type LoadedIndicatorValues = {
   valueByTerritoryId: Map<string, number | null>;
   indicator: string;
+  territoryParentKey: string;
   territoryKey: string;
   territoryLevel: string;
   year: number;
@@ -154,6 +156,10 @@ const EMPTY_TRANSPORT_ROUTE_DATA = {
 
 function getTerritoryFilterKey(territoryIds: string[]) {
   return territoryIds.length === 0 ? "all" : territoryIds.join("|");
+}
+
+function getTerritoryParentKey(territoryParentId: string | null) {
+  return territoryParentId ?? "all";
 }
 
 function getTransportRouteLineKey(transportRouteLines: string[]) {
@@ -981,6 +987,7 @@ export function MapView({
   transportRouteLines,
   territoryIds,
   territoryLevel,
+  territoryParentId,
   viewMode,
   year,
 }: MapViewProps) {
@@ -999,6 +1006,7 @@ export function MapView({
     transportRouteLines,
     territoryIds,
     territoryLevel,
+    territoryParentId,
     viewMode,
   });
   const lastFitKeyRef = useRef<string | null>(null);
@@ -1006,6 +1014,7 @@ export function MapView({
   const [legend, setLegend] = useState<LegendState | null>(null);
   const [mapInitializationError, setMapInitializationError] = useState<string | null>(null);
   const territoryKey = useMemo(() => getTerritoryFilterKey(territoryIds), [territoryIds]);
+  const territoryParentKey = useMemo(() => getTerritoryParentKey(territoryParentId), [territoryParentId]);
   const transportLineKey = useMemo(() => getTransportRouteLineKey(transportRouteLines), [transportRouteLines]);
   const transportColorLineKey = useMemo(
     () => getTransportRouteLineKey(transportAvailableLines),
@@ -1022,6 +1031,7 @@ export function MapView({
     transportRouteLines,
     territoryIds,
     territoryLevel,
+    territoryParentId,
     viewMode,
   };
 
@@ -1032,9 +1042,11 @@ export function MapView({
     if (
       !territoryData ||
       !indicatorValues ||
+      territoryData.territoryParentKey !== territoryParentKey ||
       territoryData.territoryKey !== territoryKey ||
       territoryData.territoryLevel !== territoryLevel ||
       indicatorValues.indicator !== indicator ||
+      indicatorValues.territoryParentKey !== territoryParentKey ||
       indicatorValues.territoryKey !== territoryKey ||
       indicatorValues.territoryLevel !== territoryLevel ||
       indicatorValues.year !== year
@@ -1120,16 +1132,16 @@ export function MapView({
 
     async function loadTerritoryGeometry() {
       try {
-        const data = await fetchTerritories(territoryLevel, territoryIds);
+        const data = await fetchTerritories(territoryLevel, territoryIds, territoryParentId);
 
         if (isCancelled) {
           return;
         }
 
-        loadedTerritoryDataRef.current = { data, territoryKey, territoryLevel };
+        loadedTerritoryDataRef.current = { data, territoryParentKey, territoryKey, territoryLevel };
 
         const applyData = () => {
-          const fitKey = `${territoryLevel}:${territoryKey}`;
+          const fitKey = `${territoryLevel}:${territoryParentKey}:${territoryKey}`;
           const didRender = renderCurrentData(mapInstance, lastFitKeyRef.current !== fitKey);
 
           if (didRender) {
@@ -1153,7 +1165,7 @@ export function MapView({
     return () => {
       isCancelled = true;
     };
-  }, [onDataError, territoryIds, territoryKey, territoryLevel]);
+  }, [onDataError, territoryIds, territoryKey, territoryLevel, territoryParentId, territoryParentKey]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1167,7 +1179,7 @@ export function MapView({
 
     async function loadIndicatorValues() {
       try {
-        const data = await fetchIndicatorValues(indicator, year, territoryLevel, territoryIds);
+        const data = await fetchIndicatorValues(indicator, year, territoryLevel, territoryIds, territoryParentId);
 
         if (isCancelled) {
           return;
@@ -1176,13 +1188,14 @@ export function MapView({
         loadedIndicatorValuesRef.current = {
           valueByTerritoryId: getValueByTerritoryId(data.values),
           indicator,
+          territoryParentKey,
           territoryKey,
           territoryLevel,
           year,
         };
 
         const applyData = () => {
-          const fitKey = `${territoryLevel}:${territoryKey}`;
+          const fitKey = `${territoryLevel}:${territoryParentKey}:${territoryKey}`;
           const didRender = renderCurrentData(mapInstance, lastFitKeyRef.current !== fitKey);
 
           if (didRender) {
@@ -1206,7 +1219,7 @@ export function MapView({
     return () => {
       isCancelled = true;
     };
-  }, [indicator, onDataError, territoryIds, territoryKey, territoryLevel, year]);
+  }, [indicator, onDataError, territoryIds, territoryKey, territoryLevel, territoryParentId, territoryParentKey, year]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -1315,6 +1328,7 @@ export function MapView({
       !map ||
       !loadedData ||
       loadedData.indicator !== indicator ||
+      loadedData.territoryParentKey !== territoryParentKey ||
       loadedData.territoryKey !== territoryKey ||
       loadedData.territoryLevel !== territoryLevel ||
       loadedData.year !== year
@@ -1331,6 +1345,7 @@ export function MapView({
       transportRouteLines,
       territoryIds,
       territoryLevel,
+      territoryParentId,
       viewMode,
     };
     renderTerritoryData(map, loadedData.data, layerSettings, false);
@@ -1340,6 +1355,8 @@ export function MapView({
     geometryMode,
     indicator,
     territoryIds,
+    territoryParentId,
+    territoryParentKey,
     territoryKey,
     territoryLayerMode,
     territoryLevel,

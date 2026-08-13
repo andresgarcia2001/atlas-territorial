@@ -6,11 +6,14 @@ import {
   areLayerSettingsEqual,
   getDefaultColorMode,
   getDefaultIndicator,
+  getDefaultTerritoryParentId,
   getInitialLayerSettings,
   getInitialTerritoryLevel,
+  getTerritoryOptionsKey,
   getTerritoryLevelsOrFallback,
   getTerritorySelectionLabel,
   getTransportRouteLineSelectionLabel,
+  shouldUseParentTerritoryFilter,
 } from "./territoryMetadata";
 import type { TerritoryLevel } from "./types";
 
@@ -77,6 +80,12 @@ describe("territoryMetadata", () => {
     expect(
       areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
         ...DEFAULT_LAYER_SETTINGS,
+        territoryParentId: "provincia_02",
+      }),
+    ).toBe(false);
+    expect(
+      areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
+        ...DEFAULT_LAYER_SETTINGS,
         territoryIds: ["provincia_02"],
       }),
     ).toBe(false);
@@ -90,5 +99,16 @@ describe("territoryMetadata", () => {
     expect(getTransportRouteLineSelectionLabel([])).toBe("Todas");
     expect(getTransportRouteLineSelectionLabel(["010"])).toBe("Línea 010");
     expect(getTransportRouteLineSelectionLabel(["010", "152"])).toBe("2 líneas");
+  });
+
+  it("uses province parent filters for electoral circuits", () => {
+    const parentOptions = [{ id: "provincia_06", name: "Buenos Aires", level: "province", parent_id: null }] as const;
+
+    expect(shouldUseParentTerritoryFilter("electoral_circuit")).toBe(true);
+    expect(shouldUseParentTerritoryFilter("municipality")).toBe(false);
+    expect(getTerritoryOptionsKey("electoral_circuit", "provincia_06")).toBe("electoral_circuit:provincia_06");
+    expect(getTerritoryOptionsKey("province")).toBe("province:all");
+    expect(getDefaultTerritoryParentId("electoral_circuit", [...parentOptions])).toBe("provincia_06");
+    expect(getDefaultTerritoryParentId("municipality", [...parentOptions])).toBeNull();
   });
 });

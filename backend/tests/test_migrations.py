@@ -108,6 +108,18 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
 
                 cur.execute(
                     """
+                    SELECT definition
+                    FROM pg_matviews
+                    WHERE schemaname = 'public'
+                      AND matviewname = 'territory_indicator_map_data_mv';
+                    """
+                )
+                map_data_definition = cur.fetchone()[0]
+                assert "electoral_circuit" in map_data_definition
+                assert "0.0005" in map_data_definition
+
+                cur.execute(
+                    """
                     SELECT indexname
                     FROM pg_indexes
                     WHERE schemaname = 'public'
