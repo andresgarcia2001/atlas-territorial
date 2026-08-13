@@ -19,6 +19,7 @@ export const DEFAULT_LAYER_SETTINGS: LayerSettings = {
   transportOverlay: "none",
   transportRouteLines: [],
   territoryLevel: DEFAULT_TERRITORY_LEVEL,
+  territoryProvinceId: null,
   territoryParentId: null,
   territoryIds: [],
 };
@@ -37,6 +38,7 @@ export function areLayerSettingsEqual(first: LayerSettings, second: LayerSetting
     first.transportOverlay === second.transportOverlay &&
     areArraysEqual(first.transportRouteLines, second.transportRouteLines) &&
     first.territoryLevel === second.territoryLevel &&
+    first.territoryProvinceId === second.territoryProvinceId &&
     first.territoryParentId === second.territoryParentId &&
     areArraysEqual(first.territoryIds, second.territoryIds)
   );
@@ -66,12 +68,20 @@ export function shouldUseParentTerritoryFilter(territoryLevel: TerritoryLevelId)
   return territoryLevel === "electoral_circuit";
 }
 
+export function shouldUseProvinceTerritoryFilter(territoryLevel: TerritoryLevelId) {
+  return territoryLevel === "electoral_circuit";
+}
+
 export function getTerritoryOptionsKey(territoryLevel: TerritoryLevelId, parentId: string | null = null) {
   return `${territoryLevel}:${parentId ?? "all"}`;
 }
 
 export function getDefaultTerritoryParentId(territoryLevel: TerritoryLevelId, parentOptions: TerritoryOption[]) {
   return shouldUseParentTerritoryFilter(territoryLevel) ? parentOptions[0]?.id ?? null : null;
+}
+
+export function getDefaultTerritoryProvinceId(territoryLevel: TerritoryLevelId, provinceOptions: TerritoryOption[]) {
+  return shouldUseProvinceTerritoryFilter(territoryLevel) ? provinceOptions[0]?.id ?? null : null;
 }
 
 export function getInitialTerritoryLevel(levels: TerritoryLevel[]) {

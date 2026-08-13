@@ -988,6 +988,7 @@ export function MapView({
   territoryIds,
   territoryLevel,
   territoryParentId,
+  territoryProvinceId,
   viewMode,
   year,
 }: MapViewProps) {
@@ -1007,6 +1008,7 @@ export function MapView({
     territoryIds,
     territoryLevel,
     territoryParentId,
+    territoryProvinceId,
     viewMode,
   });
   const lastFitKeyRef = useRef<string | null>(null);
@@ -1032,6 +1034,7 @@ export function MapView({
     territoryIds,
     territoryLevel,
     territoryParentId,
+    territoryProvinceId,
     viewMode,
   };
 
@@ -1346,6 +1349,7 @@ export function MapView({
       territoryIds,
       territoryLevel,
       territoryParentId,
+      territoryProvinceId,
       viewMode,
     };
     renderTerritoryData(map, loadedData.data, layerSettings, false);
@@ -1357,6 +1361,7 @@ export function MapView({
     territoryIds,
     territoryParentId,
     territoryParentKey,
+    territoryProvinceId,
     territoryKey,
     territoryLayerMode,
     territoryLevel,

@@ -152,6 +152,7 @@ export type LayerSettings = {
   transportOverlay: TransportOverlayMode;
   transportRouteLines: string[];
   territoryLevel: TerritoryLevelId;
+  territoryProvinceId: string | null;
   territoryParentId: string | null;
   territoryIds: string[];
 };

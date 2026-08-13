@@ -56,7 +56,6 @@ def test_fetch_map_data_uses_left_join_for_missing_indicator_values(monkeypatch)
         2022,
         "province",
         "provincia_legacy",
-        "provincia_legacy",
         ["provincia_02"],
         ["provincia_02"],
     )
@@ -80,9 +79,43 @@ def test_fetch_territories_with_geometry_reads_cached_map_geometry(monkeypatch):
     assert cursor.executed_params == (
         "municipality",
         "provincia_02",
-        "provincia_02",
         ["municipio_001"],
         ["municipio_001"],
+    )
+
+
+def test_fetch_territory_options_can_filter_electoral_circuits_by_municipality_geometry(monkeypatch):
+    cursor = FakeCursor()
+    monkeypatch.setattr(repositories, "get_connection", lambda: FakeConnection(cursor))
+
+    rows = repositories.fetch_territory_options("electoral_circuit", parent_id="municipio_060735")
+
+    assert rows == []
+    assert "JOIN territories parent_filter" in cursor.executed_query
+    assert "EXISTS" not in cursor.executed_query
+    assert "ST_Relate(t.geom, parent_filter.geom, 'T********')" in cursor.executed_query
+    assert "parent_filter.level_id = 'municipality'" in cursor.executed_query
+    assert cursor.executed_params == (
+        "municipio_060735",
+        "electoral_circuit",
+    )
+
+
+def test_fetch_territories_with_geometry_can_filter_electoral_circuits_by_municipality_geometry(monkeypatch):
+    cursor = FakeCursor()
+    monkeypatch.setattr(repositories, "get_connection", lambda: FakeConnection(cursor))
+
+    rows = repositories.fetch_territories_with_geometry("electoral_circuit", parent_id="municipio_060735")
+
+    assert rows == []
+    assert "JOIN territories target_geom" in cursor.executed_query
+    assert "JOIN territories parent_filter" in cursor.executed_query
+    assert "ST_Relate(target_geom.geom, parent_filter.geom, 'T********')" in cursor.executed_query
+    assert cursor.executed_params == (
+        "municipio_060735",
+        "electoral_circuit",
+        None,
+        None,
     )
 
 

@@ -7,6 +7,7 @@ import {
   getDefaultColorMode,
   getDefaultIndicator,
   getDefaultTerritoryParentId,
+  getDefaultTerritoryProvinceId,
   getInitialLayerSettings,
   getInitialTerritoryLevel,
   getTerritoryOptionsKey,
@@ -14,6 +15,7 @@ import {
   getTerritorySelectionLabel,
   getTransportRouteLineSelectionLabel,
   shouldUseParentTerritoryFilter,
+  shouldUseProvinceTerritoryFilter,
 } from "./territoryMetadata";
 import type { TerritoryLevel } from "./types";
 
@@ -80,6 +82,12 @@ describe("territoryMetadata", () => {
     expect(
       areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
         ...DEFAULT_LAYER_SETTINGS,
+        territoryProvinceId: "provincia_02",
+      }),
+    ).toBe(false);
+    expect(
+      areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
+        ...DEFAULT_LAYER_SETTINGS,
         territoryParentId: "provincia_02",
       }),
     ).toBe(false);
@@ -101,14 +109,23 @@ describe("territoryMetadata", () => {
     expect(getTransportRouteLineSelectionLabel(["010", "152"])).toBe("2 líneas");
   });
 
-  it("uses province parent filters for electoral circuits", () => {
-    const parentOptions = [{ id: "provincia_06", name: "Buenos Aires", level: "province", parent_id: null }] as const;
+  it("uses province and municipality filters for electoral circuits", () => {
+    const provinceOptions = [{ id: "provincia_06", name: "Buenos Aires", level: "province", parent_id: null }] as const;
+    const municipalityOptions = [
+      { id: "municipio_060007", name: "Adolfo Alsina", level: "municipality", parent_id: "provincia_06" },
+    ] as const;
 
     expect(shouldUseParentTerritoryFilter("electoral_circuit")).toBe(true);
     expect(shouldUseParentTerritoryFilter("municipality")).toBe(false);
-    expect(getTerritoryOptionsKey("electoral_circuit", "provincia_06")).toBe("electoral_circuit:provincia_06");
+    expect(shouldUseProvinceTerritoryFilter("electoral_circuit")).toBe(true);
+    expect(shouldUseProvinceTerritoryFilter("municipality")).toBe(false);
+    expect(getTerritoryOptionsKey("electoral_circuit", "municipio_060007")).toBe(
+      "electoral_circuit:municipio_060007",
+    );
     expect(getTerritoryOptionsKey("province")).toBe("province:all");
-    expect(getDefaultTerritoryParentId("electoral_circuit", [...parentOptions])).toBe("provincia_06");
-    expect(getDefaultTerritoryParentId("municipality", [...parentOptions])).toBeNull();
+    expect(getDefaultTerritoryParentId("electoral_circuit", [...municipalityOptions])).toBe("municipio_060007");
+    expect(getDefaultTerritoryParentId("municipality", [...municipalityOptions])).toBeNull();
+    expect(getDefaultTerritoryProvinceId("electoral_circuit", [...provinceOptions])).toBe("provincia_06");
+    expect(getDefaultTerritoryProvinceId("municipality", [...provinceOptions])).toBeNull();
   });
 });

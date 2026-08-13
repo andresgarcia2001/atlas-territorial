@@ -10,6 +10,7 @@ import {
   getDefaultIndicator,
   getDefaultColorMode,
   getDefaultTerritoryParentId,
+  getDefaultTerritoryProvinceId,
   getInitialLayerSettings,
   getInitialTerritoryLevel,
   getTerritoryOptionsKey,
@@ -17,6 +18,7 @@ import {
   getTerritorySelectionLabel,
   getTransportRouteLineSelectionLabel,
   shouldUseParentTerritoryFilter,
+  shouldUseProvinceTerritoryFilter,
 } from "./territoryMetadata";
 import {
   compareTransportRouteLines,
@@ -101,18 +103,43 @@ export function App() {
     territoryLevels.find((level) => level.id === draftLayer.territoryLevel) ?? FALLBACK_TERRITORY_LEVELS[0];
   const selectedAppliedLevel =
     territoryLevels.find((level) => level.id === appliedLayer.territoryLevel) ?? FALLBACK_TERRITORY_LEVELS[0];
-  const parentTerritoryOptions = territoryOptionsByKey[getTerritoryOptionsKey("province")] ?? EMPTY_TERRITORY_OPTIONS;
+  const provinceTerritoryOptions =
+    territoryOptionsByKey[getTerritoryOptionsKey("province")] ?? EMPTY_TERRITORY_OPTIONS;
+  const shouldShowProvinceTerritoryFilter = shouldUseProvinceTerritoryFilter(draftLayer.territoryLevel);
   const shouldShowParentTerritoryFilter = shouldUseParentTerritoryFilter(draftLayer.territoryLevel);
+  const selectedDraftProvinceTerritory = provinceTerritoryOptions.find(
+    (territory) => territory.id === draftLayer.territoryProvinceId,
+  );
+  const selectedAppliedProvinceTerritory = provinceTerritoryOptions.find(
+    (territory) => territory.id === appliedLayer.territoryProvinceId,
+  );
+  const parentTerritoryOptionsKey = getTerritoryOptionsKey("municipality", draftLayer.territoryProvinceId);
+  const appliedParentTerritoryOptionsKey = getTerritoryOptionsKey("municipality", appliedLayer.territoryProvinceId);
+  const cachedParentTerritoryOptions = territoryOptionsByKey[parentTerritoryOptionsKey];
+  const parentTerritoryOptions = shouldShowParentTerritoryFilter
+    ? cachedParentTerritoryOptions ?? EMPTY_TERRITORY_OPTIONS
+    : EMPTY_TERRITORY_OPTIONS;
+  const appliedParentTerritoryOptions = shouldUseParentTerritoryFilter(appliedLayer.territoryLevel)
+    ? territoryOptionsByKey[appliedParentTerritoryOptionsKey] ?? EMPTY_TERRITORY_OPTIONS
+    : EMPTY_TERRITORY_OPTIONS;
+  const isLoadingParentTerritoryOptions =
+    shouldShowParentTerritoryFilter &&
+    Boolean(draftLayer.territoryProvinceId) &&
+    cachedParentTerritoryOptions === undefined;
   const selectedDraftParentTerritory = parentTerritoryOptions.find(
     (territory) => territory.id === draftLayer.territoryParentId,
   );
-  const selectedAppliedParentTerritory = parentTerritoryOptions.find(
+  const selectedAppliedParentTerritory = appliedParentTerritoryOptions.find(
     (territory) => territory.id === appliedLayer.territoryParentId,
   );
-  const territoryOptionsKey = getTerritoryOptionsKey(draftLayer.territoryLevel, draftLayer.territoryParentId);
+  const territoryOptionsParentId = shouldShowParentTerritoryFilter ? draftLayer.territoryParentId : null;
+  const appliedTerritoryOptionsParentId = shouldUseParentTerritoryFilter(appliedLayer.territoryLevel)
+    ? appliedLayer.territoryParentId
+    : null;
+  const territoryOptionsKey = getTerritoryOptionsKey(draftLayer.territoryLevel, territoryOptionsParentId);
   const appliedTerritoryOptionsKey = getTerritoryOptionsKey(
     appliedLayer.territoryLevel,
-    appliedLayer.territoryParentId,
+    appliedTerritoryOptionsParentId,
   );
   const territoryOptions = territoryOptionsByKey[territoryOptionsKey] ?? EMPTY_TERRITORY_OPTIONS;
   const appliedTerritoryOptions = territoryOptionsByKey[appliedTerritoryOptionsKey] ?? EMPTY_TERRITORY_OPTIONS;
@@ -134,7 +161,10 @@ export function App() {
     [availableTransportRouteLines, draftLayer.transportRouteLines],
   );
   const hasPendingChanges = !areLayerSettingsEqual(draftLayer, appliedLayer);
+  const isMissingRequiredProvinceTerritory =
+    shouldShowProvinceTerritoryFilter && !draftLayer.territoryProvinceId;
   const isMissingRequiredParentTerritory = shouldShowParentTerritoryFilter && !draftLayer.territoryParentId;
+  const isMissingRequiredTerritoryFilter = isMissingRequiredProvinceTerritory || isMissingRequiredParentTerritory;
 
   useEffect(() => {
     async function loadInitialMetadata() {
@@ -235,17 +265,90 @@ export function App() {
   }, [draftLayer.territoryLevel, draftLayer.territoryParentId]);
 
   useEffect(() => {
-    if (
-      shouldUseParentTerritoryFilter(draftLayer.territoryLevel) &&
-      !draftLayer.territoryParentId &&
-      parentTerritoryOptions.length > 0
-    ) {
+    if (shouldUseProvinceTerritoryFilter(draftLayer.territoryLevel) && !draftLayer.territoryProvinceId) {
       updateDraftLayer({
-        territoryParentId: parentTerritoryOptions[0].id,
+        territoryProvinceId: provinceTerritoryOptions[0]?.id ?? null,
+        territoryParentId: null,
         territoryIds: [],
       });
     }
-  }, [draftLayer.territoryLevel, draftLayer.territoryParentId, parentTerritoryOptions]);
+  }, [draftLayer.territoryLevel, draftLayer.territoryProvinceId, provinceTerritoryOptions]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    if (!shouldUseProvinceTerritoryFilter(draftLayer.territoryLevel) || !draftLayer.territoryProvinceId) {
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    const optionsKey = getTerritoryOptionsKey("municipality", draftLayer.territoryProvinceId);
+
+    if (cachedParentTerritoryOptions) {
+      if (
+        !draftLayer.territoryParentId ||
+        !cachedParentTerritoryOptions.some((territory) => territory.id === draftLayer.territoryParentId)
+      ) {
+        updateDraftLayer({
+          territoryParentId: cachedParentTerritoryOptions[0]?.id ?? null,
+          territoryIds: [],
+        });
+      }
+
+      return () => {
+        isCancelled = true;
+      };
+    }
+
+    fetchTerritoryOptions("municipality", draftLayer.territoryProvinceId)
+      .then((loadedMunicipalities) => {
+        if (isCancelled) {
+          return;
+        }
+
+        setTerritoryOptionsByKey((currentOptions) => ({
+          ...currentOptions,
+          [optionsKey]: loadedMunicipalities,
+        }));
+        setDraftLayer((currentLayer) => {
+          if (
+            currentLayer.territoryLevel !== draftLayer.territoryLevel ||
+            currentLayer.territoryProvinceId !== draftLayer.territoryProvinceId
+          ) {
+            return currentLayer;
+          }
+
+          if (
+            currentLayer.territoryParentId &&
+            loadedMunicipalities.some((territory) => territory.id === currentLayer.territoryParentId)
+          ) {
+            return currentLayer;
+          }
+
+          return {
+            ...currentLayer,
+            territoryParentId: loadedMunicipalities[0]?.id ?? null,
+            territoryIds: [],
+          };
+        });
+        setMetadataError(null);
+      })
+      .catch((caughtError: Error) => {
+        if (!isCancelled) {
+          setMetadataError(caughtError.message);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [
+    draftLayer.territoryLevel,
+    draftLayer.territoryParentId,
+    draftLayer.territoryProvinceId,
+    cachedParentTerritoryOptions,
+  ]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -276,11 +379,28 @@ export function App() {
   }
 
   function updateTerritoryLevel(territoryLevel: TerritoryLevelId) {
-    const territoryParentId = getDefaultTerritoryParentId(territoryLevel, parentTerritoryOptions);
+    const territoryProvinceId = getDefaultTerritoryProvinceId(territoryLevel, provinceTerritoryOptions);
+    const cachedMunicipalities = territoryProvinceId
+      ? territoryOptionsByKey[getTerritoryOptionsKey("municipality", territoryProvinceId)] ?? EMPTY_TERRITORY_OPTIONS
+      : EMPTY_TERRITORY_OPTIONS;
+    const territoryParentId = getDefaultTerritoryParentId(territoryLevel, cachedMunicipalities);
 
     updateDraftLayer({
       territoryLevel,
+      territoryProvinceId,
       territoryParentId,
+      territoryIds: [],
+    });
+    setTerritorySearch("");
+  }
+
+  function updateTerritoryProvince(territoryProvinceId: string) {
+    const cachedMunicipalities =
+      territoryOptionsByKey[getTerritoryOptionsKey("municipality", territoryProvinceId)] ?? EMPTY_TERRITORY_OPTIONS;
+
+    updateDraftLayer({
+      territoryProvinceId,
+      territoryParentId: getDefaultTerritoryParentId(draftLayer.territoryLevel, cachedMunicipalities),
       territoryIds: [],
     });
     setTerritorySearch("");
@@ -330,7 +450,7 @@ export function App() {
   }
 
   function applyDraftLayer() {
-    if (!hasPendingChanges || isMissingRequiredParentTerritory) {
+    if (!hasPendingChanges || isMissingRequiredTerritoryFilter) {
       return;
     }
 
@@ -398,27 +518,58 @@ export function App() {
           </div>
         </section>
 
-        {shouldShowParentTerritoryFilter && (
-          <section className="control-block" aria-labelledby="parent-territory-heading">
+        {shouldShowProvinceTerritoryFilter && (
+          <section className="control-block" aria-labelledby="province-territory-heading">
             <div className="control-title">
-              <label id="parent-territory-heading">Provincia</label>
-              <span>{selectedDraftParentTerritory?.name ?? "Seleccionar"}</span>
+              <label id="province-territory-heading">Provincia</label>
+              <span>{selectedDraftProvinceTerritory?.name ?? "Seleccionar"}</span>
             </div>
 
             <div className="parent-territory-list">
-              {parentTerritoryOptions.map((territory) => (
+              {provinceTerritoryOptions.map((territory) => (
                 <button
-                  aria-pressed={territory.id === draftLayer.territoryParentId}
+                  aria-pressed={territory.id === draftLayer.territoryProvinceId}
                   className={
-                    territory.id === draftLayer.territoryParentId ? "territory-button is-active" : "territory-button"
+                    territory.id === draftLayer.territoryProvinceId ? "territory-button is-active" : "territory-button"
                   }
                   key={territory.id}
                   type="button"
-                  onClick={() => updateTerritoryParent(territory.id)}
+                  onClick={() => updateTerritoryProvince(territory.id)}
                 >
                   {territory.name}
                 </button>
               ))}
+            </div>
+          </section>
+        )}
+
+        {shouldShowParentTerritoryFilter && (
+          <section className="control-block" aria-labelledby="parent-territory-heading">
+            <div className="control-title">
+              <label id="parent-territory-heading">Municipio</label>
+              <span>{selectedDraftParentTerritory?.name ?? "Seleccionar"}</span>
+            </div>
+
+            <div className="parent-territory-list">
+              {parentTerritoryOptions.length === 0 ? (
+                <p className="empty-state">
+                  {isLoadingParentTerritoryOptions ? "Cargando municipios" : "Sin municipios"}
+                </p>
+              ) : (
+                parentTerritoryOptions.map((territory) => (
+                  <button
+                    aria-pressed={territory.id === draftLayer.territoryParentId}
+                    className={
+                      territory.id === draftLayer.territoryParentId ? "territory-button is-active" : "territory-button"
+                    }
+                    key={territory.id}
+                    type="button"
+                    onClick={() => updateTerritoryParent(territory.id)}
+                  >
+                    {territory.name}
+                  </button>
+                ))
+              )}
             </div>
           </section>
         )}
@@ -645,7 +796,7 @@ export function App() {
         <button
           className="apply-button"
           type="button"
-          disabled={!hasPendingChanges || isMissingRequiredParentTerritory}
+          disabled={!hasPendingChanges || isMissingRequiredTerritoryFilter}
           onClick={applyDraftLayer}
         >
           Buscar
@@ -663,8 +814,11 @@ export function App() {
           {appliedLayer.transportOverlay === "ba_bus_routes" && (
             <p>Líneas: {getTransportRouteLineSelectionLabel(appliedLayer.transportRouteLines)}</p>
           )}
+          {shouldUseProvinceTerritoryFilter(appliedLayer.territoryLevel) && selectedAppliedProvinceTerritory && (
+            <p>Provincia: {selectedAppliedProvinceTerritory.name}</p>
+          )}
           {shouldUseParentTerritoryFilter(appliedLayer.territoryLevel) && selectedAppliedParentTerritory && (
-            <p>Provincia: {selectedAppliedParentTerritory.name}</p>
+            <p>Municipio: {selectedAppliedParentTerritory.name}</p>
           )}
           <p>Territorios: {getTerritorySelectionLabel(appliedLayer.territoryIds, appliedTerritoryOptions)}</p>
         </section>
@@ -685,6 +839,7 @@ export function App() {
         territoryIds={appliedLayer.territoryIds}
         territoryLevel={appliedLayer.territoryLevel}
         territoryParentId={appliedLayer.territoryParentId}
+        territoryProvinceId={appliedLayer.territoryProvinceId}
         viewMode={appliedLayer.viewMode}
         year={YEAR}
       />

@@ -4,6 +4,44 @@ from db import get_connection
 DEFAULT_TERRITORY_LEVEL = "province"
 
 
+def build_territory_parent_filter(alias, parent_id, geometry_alias=None):
+    if parent_id is None:
+        return "", "", (), ()
+
+    if isinstance(parent_id, str) and parent_id.startswith("municipio_"):
+        spatial_alias = geometry_alias or alias
+        spatial_join = ""
+
+        if spatial_alias != alias:
+            spatial_join = f"""
+        JOIN territories {spatial_alias}
+          ON {spatial_alias}.id = {alias}.id
+            """
+
+        return (
+            f"""
+        {spatial_join}
+        JOIN territories parent_filter
+          ON parent_filter.id = %s
+         AND parent_filter.level_id = 'municipality'
+            """,
+            f"""
+          AND (
+            {alias}.parent_id = parent_filter.id
+            OR (
+              {alias}.level_id = 'electoral_circuit'
+              AND {spatial_alias}.geom && parent_filter.geom
+              AND ST_Relate({spatial_alias}.geom, parent_filter.geom, 'T********')
+            )
+          )
+            """,
+            (parent_id,),
+            (),
+        )
+
+    return "", f"AND {alias}.parent_id = %s", (), (parent_id,)
+
+
 def fetch_territory_levels():
     query = """
         SELECT
@@ -24,7 +62,12 @@ def fetch_territory_levels():
 
 
 def fetch_territories_with_geometry(level=DEFAULT_TERRITORY_LEVEL, parent_id=None, territory_ids=None):
-    query = """
+    parent_join_sql, parent_where_sql, parent_join_params, parent_where_params = build_territory_parent_filter(
+        "mv",
+        parent_id,
+        geometry_alias="target_geom",
+    )
+    query = f"""
         SELECT
           mv.id,
           mv.name,
@@ -36,30 +79,36 @@ def fetch_territories_with_geometry(level=DEFAULT_TERRITORY_LEVEL, parent_id=Non
           mv.bar_center,
           mv.bar_geometry
         FROM territory_indicator_map_data_mv mv
+        {parent_join_sql}
         WHERE mv.level_id = %s
-          AND (%s::text IS NULL OR mv.parent_id = %s)
+          {parent_where_sql}
           AND (%s::text[] IS NULL OR mv.id = ANY(%s::text[]))
-        ORDER BY name;
+        ORDER BY mv.name;
     """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query, (level, parent_id, parent_id, territory_ids, territory_ids))
+            cur.execute(query, (*parent_join_params, level, *parent_where_params, territory_ids, territory_ids))
             return cur.fetchall()
 
 
 def fetch_territory_options(level=DEFAULT_TERRITORY_LEVEL, parent_id=None):
-    query = """
-        SELECT id, name, level_id, parent_id
-        FROM territories
-        WHERE level_id = %s
-          AND (%s::text IS NULL OR parent_id = %s)
-        ORDER BY name;
+    parent_join_sql, parent_where_sql, parent_join_params, parent_where_params = build_territory_parent_filter(
+        "t",
+        parent_id,
+    )
+    query = f"""
+        SELECT t.id, t.name, t.level_id, t.parent_id
+        FROM territories t
+        {parent_join_sql}
+        WHERE t.level_id = %s
+          {parent_where_sql}
+        ORDER BY t.name;
     """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query, (level, parent_id, parent_id))
+            cur.execute(query, (*parent_join_params, level, *parent_where_params))
             return cur.fetchall()
 
 
@@ -81,7 +130,12 @@ def fetch_indicator_names(level=None, year=None):
 
 
 def fetch_map_data(indicator, year, level=DEFAULT_TERRITORY_LEVEL, territory_ids=None, parent_id=None):
-    query = """
+    parent_join_sql, parent_where_sql, parent_join_params, parent_where_params = build_territory_parent_filter(
+        "mv",
+        parent_id,
+        geometry_alias="target_geom",
+    )
+    query = f"""
         SELECT
           mv.id,
           mv.name,
@@ -94,12 +148,13 @@ def fetch_map_data(indicator, year, level=DEFAULT_TERRITORY_LEVEL, territory_ids
           mv.bar_geometry,
           i.indicator_value
         FROM territory_indicator_map_data_mv mv
+        {parent_join_sql}
         LEFT JOIN indicators i
           ON i.territory_id = mv.id
          AND i.indicator_name = %s
          AND i.year = %s
         WHERE mv.level_id = %s
-          AND (%s::text IS NULL OR mv.parent_id = %s)
+          {parent_where_sql}
           AND (%s::text[] IS NULL OR mv.id = ANY(%s::text[]))
         ORDER BY mv.name;
     """
@@ -108,30 +163,46 @@ def fetch_map_data(indicator, year, level=DEFAULT_TERRITORY_LEVEL, territory_ids
         with conn.cursor() as cur:
             cur.execute(
                 query,
-                (indicator, year, level, parent_id, parent_id, territory_ids, territory_ids),
+                (
+                    *parent_join_params,
+                    indicator,
+                    year,
+                    level,
+                    *parent_where_params,
+                    territory_ids,
+                    territory_ids,
+                ),
             )
             return cur.fetchall()
 
 
 def fetch_indicator_values(indicator, year, level=DEFAULT_TERRITORY_LEVEL, territory_ids=None, parent_id=None):
-    query = """
+    parent_join_sql, parent_where_sql, parent_join_params, parent_where_params = build_territory_parent_filter(
+        "t",
+        parent_id,
+    )
+    query = f"""
         SELECT
           t.id,
           i.indicator_value
         FROM territories t
+        {parent_join_sql}
         LEFT JOIN indicators i
           ON i.territory_id = t.id
          AND i.indicator_name = %s
          AND i.year = %s
         WHERE t.level_id = %s
-          AND (%s::text IS NULL OR t.parent_id = %s)
+          {parent_where_sql}
           AND (%s::text[] IS NULL OR t.id = ANY(%s::text[]))
         ORDER BY t.name;
     """
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query, (indicator, year, level, parent_id, parent_id, territory_ids, territory_ids))
+            cur.execute(
+                query,
+                (*parent_join_params, indicator, year, level, *parent_where_params, territory_ids, territory_ids),
+            )
             return cur.fetchall()
 
 

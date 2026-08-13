@@ -384,11 +384,20 @@ Endpoints principales:
 - `GET /indicators`
 - `GET /map-data?level=census_radius&indicator=poblacion_total&year=2022`
 - `GET /map-data?level=electoral_circuit&indicator=poblacion_total&year=2022`
+- `GET /territory-options?level=municipality&parent_id=provincia_06`
+- `GET /territories?level=electoral_circuit&parent_id=municipio_060007`
+- `GET /indicator-values?level=electoral_circuit&parent_id=municipio_060007&indicator=poblacion_total&year=2022`
 - `GET /indicator-values?level=census_radius&indicator=poblacion_total&year=2022`
 - `GET /transport-routes?source=BA%20DATA%20colectivos%20recorridos&lines=10`
 
 `/map-data` acepta `territory_ids` para filtrar territorios. `province_ids` queda
 soportado como alias temporal de compatibilidad.
+
+Para circuitos electorales, `parent_id` acepta dos escalas: provincia, usando la
+relacion jerarquica cargada desde el dataset fuente, o municipio, usando cruce
+espacial contra la geometria municipal. El filtro municipal incluye circuitos con
+interior superpuesto al municipio; es una ayuda de visualizacion y no reemplaza
+una tabla oficial de equivalencias circuito-municipio.
 
 Para escalar a radios censales, la direccion recomendada es cachear geometria desde
 `/territories` y refrescar valores desde `/indicator-values`. `/map-data` queda como
