@@ -200,6 +200,49 @@ def test_load_dataset_derives_municipality_parent_from_in1(monkeypatch, tmp_path
     ]
 
 
+def test_load_dataset_loads_electoral_circuit_parent_from_prepared_province_code(monkeypatch, tmp_path):
+    geojson_path = write_geojson(
+        tmp_path,
+        [
+            polygon_feature(
+                {
+                    "circuit_key": "2025_06_001_00018",
+                    "name": "Chaco - Circuito 00018 (Depto 001)",
+                    "province_code": "22",
+                }
+            )
+        ],
+    )
+    config = next(config for config in load_territories.DATASETS if config.name == "electoral_circuits")
+    upserted_territories = []
+
+    def fake_upsert_territory(cur, config, territory_id, name, external_id, parent_id, properties, geometry):
+        upserted_territories.append(
+            {
+                "territory_id": territory_id,
+                "name": name,
+                "external_id": external_id,
+                "parent_id": parent_id,
+            }
+        )
+
+    monkeypatch.setenv("ELECTORAL_CIRCUITS_GEOJSON", str(geojson_path))
+    monkeypatch.setattr(load_territories, "upsert_territory", fake_upsert_territory)
+    monkeypatch.setattr(load_territories, "delete_stale_territories", lambda *args: 0)
+
+    loaded_count = load_territories.load_dataset(object(), config, {"provincia_22"})
+
+    assert loaded_count == 1
+    assert upserted_territories == [
+        {
+            "territory_id": "circuito_electoral_2025_06_001_00018",
+            "name": "Chaco - Circuito 00018 (Depto 001)",
+            "external_id": "2025_06_001_00018",
+            "parent_id": "provincia_22",
+        }
+    ]
+
+
 def test_load_dataset_rejects_invalid_municipality_in1(monkeypatch, tmp_path):
     geojson_path = write_geojson(tmp_path, [polygon_feature({"in1": "", "nam": "Sin Codigo"})])
     config = load_territories.DatasetConfig(

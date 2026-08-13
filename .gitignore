@@ -7,6 +7,9 @@ frontend/.edge-headless/
 __pycache__/
 .pytest_cache/
 .docker-cli/
+.tmp/
 .env
 data/municipios_ign.geojson
 data/colectivos_recorridos.geojson
+data/circuitos_electorales_*.geojson
+data/circuitos_electorales_*_validation_report.json

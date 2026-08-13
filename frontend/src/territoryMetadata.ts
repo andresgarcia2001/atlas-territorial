@@ -7,6 +7,7 @@ export const FALLBACK_TERRITORY_LEVELS: TerritoryLevel[] = [
   { id: "province", label: "Provincias", territory_count: 1 },
   { id: "municipality", label: "Municipios", territory_count: 0 },
   { id: "census_radius", label: "Radios censales", territory_count: 0 },
+  { id: "electoral_circuit", label: "Circuitos electorales", territory_count: 0 },
 ];
 
 export const DEFAULT_LAYER_SETTINGS: LayerSettings = {
@@ -46,11 +47,16 @@ export function getDefaultIndicator(loadedIndicators: string[]) {
   return loadedIndicators.includes(DEFAULT_INDICATOR) ? DEFAULT_INDICATOR : firstIndicator?.id ?? DEFAULT_INDICATOR;
 }
 
+export function getDefaultColorMode(loadedIndicators: string[]) {
+  return loadedIndicators.length === 0 ? "territory" : DEFAULT_LAYER_SETTINGS.colorMode;
+}
+
 export function getInitialLayerSettings(loadedIndicators: string[], territoryLevel: TerritoryLevelId): LayerSettings {
   return {
     ...DEFAULT_LAYER_SETTINGS,
     territoryLevel,
     indicator: getDefaultIndicator(loadedIndicators),
+    colorMode: getDefaultColorMode(loadedIndicators),
   };
 }
 

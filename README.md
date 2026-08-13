@@ -2,7 +2,8 @@
 
 MVP local, no productivo, para explorar indicadores territoriales de Argentina sobre
 geometrias PostGIS. El objetivo actual es validar la arquitectura para provincias,
-municipios y radios censales antes de crecer en datos y funcionalidades.
+municipios, radios censales y circuitos electorales antes de crecer en datos y
+funcionalidades.
 
 Visor territorial local con PostgreSQL/PostGIS, FastAPI, React y MapLibre.
 
@@ -29,7 +30,8 @@ flowchart LR
 El modelo central es `territories`: una unidad territorial puede ser una provincia,
 un municipio o un radio censal. Cada territorio guarda:
 
-- `level_id`: `province`, `municipality` o `census_radius`.
+- `level_id`: `province`, `municipality`, `census_radius` o
+  `electoral_circuit`.
 - `source`: fuente de la geometria, por ejemplo `IGN`.
 - `external_id`: codigo original del dataset fuente.
 - `parent_id`: relacion jerarquica opcional con otro territorio.
@@ -52,6 +54,7 @@ Fuentes usadas actualmente:
 | Municipios, comunas, juntas y gobiernos locales disponibles en IGN | WFS `ign:municipio`, normalizado en `data/municipios_ign.geojson` | Poligonos municipales/locales para el mapa. | [IGN WFS GetCapabilities](https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetCapabilities) y descarga GeoJSON con `typeName=ign:municipio`: [GetFeature](https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetFeature&typeName=ign:municipio&outputFormat=application/json&srsName=EPSG:4326). |
 | Gobiernos locales de Santiago del Estero y validacion externa de codigos | `gobiernos-locales.geojson` de Georef | Suplemento de poligonos faltantes para Santiago del Estero y verificacion de casos con `in1` faltante o duplicado. | [Georef - descarga de base completa](https://www.argentina.gob.ar/georef/descarga-de-la-base-completa) y endpoint usado: [gobiernos-locales.geojson](https://apis.datos.gob.ar/georef/api/v2.0/gobiernos-locales.geojson). |
 | Codigos geograficos de referencia | No se carga como dataset independiente | Referencia conceptual para interpretar codigos territoriales nacionales. | [INDEC - Codigos geograficos del Censo 2022](https://redatam.indec.gob.ar/redarg/CENSOS/CPV2022/Docs/codcart.htm). |
+| Circuitos electorales de Argentina | `data/circuitos_electorales_2025.geojson`, generado con `scripts/prepare_electoral_circuits.py` | Nivel `electoral_circuit` para mapear circuitos electorales por provincia. | Dataset [tartagalensis/circuitos_electorales_AR](https://github.com/tartagalensis/circuitos_electorales_AR), publicado por Franco Galeano como `circuitos_electorales_AR: circuitos electorales de la Republica Argentina`, version `2025.1`, licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). |
 | Recorridos de colectivos de CABA | `data/colectivos_recorridos.geojson` opcional | Overlay de lineas de transporte sobre el mapa territorial. | [BA DATA - Colectivos: recorridos](https://data.buenosaires.gob.ar/es_AR/dataset/colectivos-recorridos), recurso GeoJSON. |
 
 Tratamientos y fusiones aplicadas:
@@ -74,9 +77,29 @@ Tratamientos y fusiones aplicadas:
   administrativo.
 - Los radios censales no se cargan todavia. `CENSUS_RADII_GEOJSON` es un insumo
   opcional futuro.
+- Los circuitos electorales se preparan como un nivel territorial independiente,
+  no como overlay. El preparador combina los 24 GeoJSON del corte elegido, traduce
+  `codprov` electoral (`01`-`24`) al codigo canonico de provincia usado por este
+  atlas (`02`, `06`, ..., `94`) y usa ese codigo como `parent_id`.
+- Un mismo circuito puede venir en mas de una feature cuando su territorio no es
+  contiguo. Para respetar el modelo `territories`, el preparador fusiona esas
+  partes en un unico `MultiPolygon` por clave `source_year + codprov + coddepto +
+  circuito`.
+- Los marcadores sin circuito asignado documentados por la fuente (`sindatos`,
+  `zonagris`, `zonagris/`, `zonaincon`, `S/D`) se conservan con claves estables
+  para no abrir huecos en el mapa. No deben usarse como circuitos validos al unir
+  resultados electorales.
+- Algunas features fuente llegan como `GeometryCollection`; el preparador conserva
+  las partes poligonales y reporta las partes no poligonales ignoradas en
+  `data/circuitos_electorales_<anio>_validation_report.json`.
+- La fuente advierte que los circuitos reconstruidos son aproximaciones y que
+  Santa Fe y Tierra del Fuego renombraron circuitos entre 2021 y 2025. Para series
+  temporales entre ambos cortes hace falta una tabla de equivalencias.
 
 Para auditar estos criterios, revisar `data/README.md`,
-`data/municipios_ign_validation_report.json` y los JSON de reglas en `data/`.
+`data/municipios_ign_validation_report.json`,
+`data/circuitos_electorales_<anio>_validation_report.json` y los JSON de reglas
+en `data/`.
 
 ## Configuracion local
 
@@ -216,6 +239,8 @@ Variables principales:
 - `IGN_MUNICIPALITIES_GEOJSON`: GeoJSON de municipios/localidades censales IGN.
 - `CENSUS_RADII_GEOJSON`: GeoJSON de radios censales.
 - `CENSUS_RADII_SOURCE`: etiqueta de fuente para radios censales.
+- `ELECTORAL_CIRCUITS_GEOJSON`: GeoJSON preparado de circuitos electorales.
+- `ELECTORAL_CIRCUITS_SOURCE`: etiqueta de fuente para circuitos electorales.
 - `BA_BUS_ROUTES_GEOJSON`: GeoJSON opcional de recorridos de colectivos BA DATA.
 
 Si un dataset opcional no esta configurado o no existe, el loader lo omite. Si se
@@ -228,6 +253,8 @@ Cuando un GeoJSON use nombres de columnas distintos, configurar:
   `IGN_MUNICIPALITY_PARENT_PROPERTY`
 - `CENSUS_RADIUS_ID_PROPERTY`, `CENSUS_RADIUS_NAME_PROPERTY`,
   `CENSUS_RADIUS_PARENT_PROPERTY`
+- `ELECTORAL_CIRCUIT_ID_PROPERTY`, `ELECTORAL_CIRCUIT_NAME_PROPERTY`,
+  `ELECTORAL_CIRCUIT_PARENT_PROPERTY`
 
 Las propiedades pueden ser simples, como `nombre`, o anidadas, como `provincia.id`.
 
@@ -250,6 +277,41 @@ docker-compose --profile tools run --rm loader python load_territories.py --skip
 Ese modo no cambia el comportamiento por defecto. Solo omite features cuyo padre
 obligatorio no exista y reporta en consola cada territorio saltado con su padre
 faltante.
+
+## Preparar y cargar circuitos electorales
+
+Los circuitos electorales se generan como artefacto local para no versionar un
+GeoJSON nacional pesado. Por defecto se prepara el corte 2025 desde el repositorio
+fuente:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\prepare_electoral_circuits.py --year 2025
+```
+
+Si ya existe un clon local del dataset fuente, usarlo como entrada:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\prepare_electoral_circuits.py --year 2025 --input-dir .tmp\circuitos_electorales_AR
+```
+
+El comando escribe:
+
+```text
+data/circuitos_electorales_2025.geojson
+data/circuitos_electorales_2025_validation_report.json
+```
+
+Para cargarlo en PostGIS con Docker:
+
+```powershell
+$env:ELECTORAL_CIRCUITS_GEOJSON="/data/circuitos_electorales_2025.geojson"
+docker-compose --profile tools run --rm loader
+```
+
+Para preparar otro corte, cambiar `--year 2021` y apuntar
+`ELECTORAL_CIRCUITS_GEOJSON` al archivo generado. Si se cargan cortes distintos
+en corridas separadas, conviene ajustar `ELECTORAL_CIRCUITS_SOURCE` para que la
+trazabilidad del origen quede explicita.
 
 ## Cargar overlays de transporte
 
@@ -321,6 +383,7 @@ Endpoints principales:
 - `GET /territories?level=municipality`
 - `GET /indicators`
 - `GET /map-data?level=census_radius&indicator=poblacion_total&year=2022`
+- `GET /map-data?level=electoral_circuit&indicator=poblacion_total&year=2022`
 - `GET /indicator-values?level=census_radius&indicator=poblacion_total&year=2022`
 - `GET /transport-routes?source=BA%20DATA%20colectivos%20recorridos&lines=10`
 

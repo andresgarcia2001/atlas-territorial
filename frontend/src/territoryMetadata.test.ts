@@ -4,6 +4,7 @@ import {
   DEFAULT_LAYER_SETTINGS,
   FALLBACK_TERRITORY_LEVELS,
   areLayerSettingsEqual,
+  getDefaultColorMode,
   getDefaultIndicator,
   getInitialLayerSettings,
   getInitialTerritoryLevel,
@@ -27,6 +28,13 @@ describe("territoryMetadata", () => {
       ...DEFAULT_LAYER_SETTINGS,
       territoryLevel: "municipality",
       indicator: "densidad_poblacional",
+    });
+    expect(getDefaultColorMode([])).toBe("territory");
+    expect(getInitialLayerSettings([], "electoral_circuit")).toEqual({
+      ...DEFAULT_LAYER_SETTINGS,
+      territoryLevel: "electoral_circuit",
+      indicator: "poblacion_total",
+      colorMode: "territory",
     });
   });
 

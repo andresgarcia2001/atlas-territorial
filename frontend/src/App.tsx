@@ -8,6 +8,7 @@ import {
   FALLBACK_TERRITORY_LEVELS,
   areLayerSettingsEqual,
   getDefaultIndicator,
+  getDefaultColorMode,
   getInitialLayerSettings,
   getInitialTerritoryLevel,
   getTerritoryLevelsOrFallback,
@@ -153,6 +154,7 @@ export function App() {
             return {
               ...currentLayer,
               indicator: getDefaultIndicator(loadedIndicators),
+              colorMode: getDefaultColorMode(loadedIndicators),
             };
           });
           setMetadataError(null);

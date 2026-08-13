@@ -65,6 +65,7 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
                     ("province", "Provincias", 10),
                     ("municipality", "Municipios", 20),
                     ("census_radius", "Radios censales", 30),
+                    ("electoral_circuit", "Circuitos electorales", 40),
                 ]
 
                 cur.execute(

@@ -1,6 +1,6 @@
 # Data sources and territorial identifiers
 
-Last reviewed: 2026-08-09.
+Last reviewed: 2026-08-13.
 
 This project keeps source GeoJSON files under `data/`, but database identifiers
 must be stable across source refreshes. Do not use source row order or `gid` as a
@@ -174,6 +174,113 @@ Observed on 2026-08-09 from the full Georef local-government download:
 The preparer rejects Georef supplement rows unless they have a six-digit id,
 the id prefix matches the selected province code, a name is present, and the
 geometry is `Polygon` or `MultiPolygon`.
+
+## Electoral circuit layer
+
+Source repository:
+
+- `https://github.com/tartagalensis/circuitos_electorales_AR`
+
+Citation requested by the source:
+
+- Galeano, F. (2026). `circuitos_electorales_AR: circuitos electorales de la
+  Republica Argentina` (Version 2025.1) [Conjunto de datos]. GitHub.
+
+License:
+
+- Creative Commons Attribution 4.0 International (`CC-BY-4.0`).
+
+The source publishes one GeoJSON per electoral district for 2021 and 2025. The
+project does not version the combined national output because it is generated
+from those files:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\prepare_electoral_circuits.py --year 2025
+```
+
+The generated files are:
+
+- `data/circuitos_electorales_<year>.geojson`
+- `data/circuitos_electorales_<year>_validation_report.json`
+
+The source fields are:
+
+- `circuito`: electoral circuit code. Values can include letters and no-data
+  markers such as `S/D`.
+- `codprov`: electoral district code from `01` to `24`.
+- `coddepto`: department/party code inside the electoral district. Some source
+  rows use `nan`; the preparer normalizes that value to null.
+
+Important mapping: source `codprov` is not the same code system used by the
+existing province IDs in this atlas. The preparer maps electoral district codes
+to canonical province codes before loading:
+
+| Electoral `codprov` | District | Atlas province code |
+| --- | --- | --- |
+| `01` | Ciudad Autonoma de Buenos Aires | `02` |
+| `02` | Buenos Aires | `06` |
+| `03` | Catamarca | `10` |
+| `04` | Cordoba | `14` |
+| `05` | Corrientes | `18` |
+| `06` | Chaco | `22` |
+| `07` | Chubut | `26` |
+| `08` | Entre Rios | `30` |
+| `09` | Formosa | `34` |
+| `10` | Jujuy | `38` |
+| `11` | La Pampa | `42` |
+| `12` | La Rioja | `46` |
+| `13` | Mendoza | `50` |
+| `14` | Misiones | `54` |
+| `15` | Neuquen | `58` |
+| `16` | Rio Negro | `62` |
+| `17` | Salta | `66` |
+| `18` | San Juan | `70` |
+| `19` | San Luis | `74` |
+| `20` | Santa Cruz | `78` |
+| `21` | Santa Fe | `82` |
+| `22` | Santiago del Estero | `86` |
+| `23` | Tucuman | `90` |
+| `24` | Tierra del Fuego | `94` |
+
+Generated properties used by the loader:
+
+- `circuit_key`: stable external id for this atlas, built from
+  `source_year + codprov + coddepto + circuito`.
+- `name`: display label.
+- `province_code`: canonical parent province code.
+- `source_year`, `source_file`, `source_repository`, `source_version`,
+  `source_license`, `source_citation`: traceability metadata.
+
+Loader identity:
+
+- `level_id = 'electoral_circuit'`
+- `source = 'Galeano 2026 circuitos_electorales_AR 2025.1'` by default.
+- `id = circuito_electoral_<circuit_key>`
+- `external_id = <circuit_key>`
+- `parent_id = provincia_<province_code>`
+
+Normalization policy:
+
+- Features are grouped by `source_year`, `codprov`, `coddepto` and `circuito`.
+  This follows the source recommendation to not join by `circuito` alone.
+- If the same key appears in multiple features because the circuit is not
+  contiguous, the preparer writes one `MultiPolygon`.
+- `Polygon`, `MultiPolygon` and polygon members of `GeometryCollection` are
+  accepted. Non-polygon members of a `GeometryCollection` are reported and not
+  loaded into PostGIS.
+- No-data circuit markers are preserved to avoid gaps in the map, but they are
+  not valid circuit codes for joining election results.
+
+Known limitations from the source:
+
+- There is no single complete official national cartography for electoral
+  circuits. Some provinces are reconstructed from formal electoral documents,
+  voting-place georeferencing and existing administrative boundaries.
+- Reconstructed circuit boundaries are approximate and can have variable
+  precision.
+- Santa Fe and Tierra del Fuego renamed circuits between 2021 and 2025, so those
+  two districts need an equivalence table before temporal joins.
+- Source files in `2021/data/` are raw inputs, not the homogenized map layer.
 
 ## Canonical identifiers
 

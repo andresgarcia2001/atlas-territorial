@@ -2,7 +2,7 @@ export type IndicatorResponse = {
   indicators: string[];
 };
 
-export type TerritoryLevelId = "province" | "municipality" | "census_radius";
+export type TerritoryLevelId = "province" | "municipality" | "census_radius" | "electoral_circuit";
 
 export type TerritoryLevel = {
   id: TerritoryLevelId;

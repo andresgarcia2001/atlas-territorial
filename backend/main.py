@@ -16,7 +16,7 @@ from repositories import (
     fetch_territory_options,
 )
 
-TerritoryLevelId = Literal["province", "municipality", "census_radius"]
+TerritoryLevelId = Literal["province", "municipality", "census_radius", "electoral_circuit"]
 
 app = FastAPI(title="Territorio Argentino API")
 

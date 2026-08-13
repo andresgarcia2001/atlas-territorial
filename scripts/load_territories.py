@@ -168,6 +168,25 @@ DATASETS = (
         ),
         source_env="CENSUS_RADII_SOURCE",
     ),
+    DatasetConfig(
+        name="electoral_circuits",
+        level="electoral_circuit",
+        source="Galeano 2026 circuitos_electorales_AR 2025.1",
+        path_env="ELECTORAL_CIRCUITS_GEOJSON",
+        default_path="/data/circuitos_electorales_2025.geojson",
+        id_prefix="circuito_electoral",
+        id_property_env="ELECTORAL_CIRCUIT_ID_PROPERTY",
+        id_property_candidates=("circuit_key",),
+        name_property_env="ELECTORAL_CIRCUIT_NAME_PROPERTY",
+        name_property_candidates=("name", "circuit_name"),
+        require_unique_external_id=True,
+        parent_id_prefix="provincia",
+        parent_property_env="ELECTORAL_CIRCUIT_PARENT_PROPERTY",
+        parent_property_candidates=("province_code", "provincia.id", "cod_prov", "codprov_canonico"),
+        require_parent_id=True,
+        source_env="ELECTORAL_CIRCUITS_SOURCE",
+        delete_stale_by_source=True,
+    ),
 )
 
 
@@ -416,7 +435,7 @@ def upsert_territory(cur, config, territory_id, name, external_id, parent_id, pr
           %s,
           %s,
           %s::jsonb,
-          ST_Multi(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326))
+          ST_Multi(ST_Force2D(ST_SetSRID(ST_GeomFromGeoJSON(%s), 4326)))
         )
         ON CONFLICT (id)
         DO UPDATE SET
