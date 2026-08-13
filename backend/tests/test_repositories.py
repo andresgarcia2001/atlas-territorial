@@ -111,8 +111,33 @@ def test_fetch_territories_with_geometry_can_filter_electoral_circuits_by_munici
     assert "JOIN territories target_geom" in cursor.executed_query
     assert "JOIN territories parent_filter" in cursor.executed_query
     assert "ST_Relate(target_geom.geom, parent_filter.geom, 'T********')" in cursor.executed_query
+    assert "ST_Intersection(target_geom.geom, parent_filter.geom)" in cursor.executed_query
     assert cursor.executed_params == (
         "municipio_060735",
+        "electoral_circuit",
+        None,
+        None,
+    )
+
+
+def test_fetch_map_data_clips_electoral_circuit_geometry_to_municipality(monkeypatch):
+    cursor = FakeCursor()
+    monkeypatch.setattr(repositories, "get_connection", lambda: FakeConnection(cursor))
+
+    rows = repositories.fetch_map_data(
+        "poblacion_total",
+        2022,
+        "electoral_circuit",
+        parent_id="municipio_060735",
+    )
+
+    assert rows == []
+    assert "ST_Intersection(target_geom.geom, parent_filter.geom)" in cursor.executed_query
+    assert "ST_AsGeoJSON" in cursor.executed_query
+    assert cursor.executed_params == (
+        "municipio_060735",
+        "poblacion_total",
+        2022,
         "electoral_circuit",
         None,
         None,

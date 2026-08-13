@@ -42,6 +42,31 @@ def build_territory_parent_filter(alias, parent_id, geometry_alias=None):
     return "", f"AND {alias}.parent_id = %s", (), (parent_id,)
 
 
+def build_territory_geometry_sql(alias, parent_id, geometry_alias=None):
+    if not (isinstance(parent_id, str) and parent_id.startswith("municipio_")):
+        return f"{alias}.geometry"
+
+    spatial_alias = geometry_alias or alias
+
+    return f"""
+          CASE
+            WHEN {alias}.level_id = 'electoral_circuit' THEN ST_AsGeoJSON(
+              ST_Multi(
+                ST_SimplifyPreserveTopology(
+                  ST_CollectionExtract(
+                    ST_Intersection({spatial_alias}.geom, parent_filter.geom),
+                    3
+                  ),
+                  0.0005
+                )
+              ),
+              5
+            )::json
+            ELSE {alias}.geometry
+          END
+    """
+
+
 def fetch_territory_levels():
     query = """
         SELECT
@@ -67,6 +92,7 @@ def fetch_territories_with_geometry(level=DEFAULT_TERRITORY_LEVEL, parent_id=Non
         parent_id,
         geometry_alias="target_geom",
     )
+    geometry_sql = build_territory_geometry_sql("mv", parent_id, geometry_alias="target_geom")
     query = f"""
         SELECT
           mv.id,
@@ -75,7 +101,7 @@ def fetch_territories_with_geometry(level=DEFAULT_TERRITORY_LEVEL, parent_id=Non
           mv.source,
           mv.external_id,
           mv.parent_id,
-          mv.geometry,
+          {geometry_sql} AS geometry,
           mv.bar_center,
           mv.bar_geometry
         FROM territory_indicator_map_data_mv mv
@@ -135,6 +161,7 @@ def fetch_map_data(indicator, year, level=DEFAULT_TERRITORY_LEVEL, territory_ids
         parent_id,
         geometry_alias="target_geom",
     )
+    geometry_sql = build_territory_geometry_sql("mv", parent_id, geometry_alias="target_geom")
     query = f"""
         SELECT
           mv.id,
@@ -143,7 +170,7 @@ def fetch_map_data(indicator, year, level=DEFAULT_TERRITORY_LEVEL, territory_ids
           mv.source,
           mv.external_id,
           mv.parent_id,
-          mv.geometry,
+          {geometry_sql} AS geometry,
           mv.bar_center,
           mv.bar_geometry,
           i.indicator_value

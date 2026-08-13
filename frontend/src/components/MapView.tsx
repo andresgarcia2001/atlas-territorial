@@ -194,6 +194,10 @@ function escapeHtml(value: string) {
   });
 }
 
+function isAbortError(caughtError: unknown) {
+  return caughtError instanceof Error && caughtError.name === "AbortError";
+}
+
 function getValueRange(data: MapData) {
   let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
@@ -1132,10 +1136,13 @@ export function MapView({
 
     const mapInstance = map;
     let isCancelled = false;
+    const abortController = new AbortController();
 
     async function loadTerritoryGeometry() {
       try {
-        const data = await fetchTerritories(territoryLevel, territoryIds, territoryParentId);
+        const data = await fetchTerritories(territoryLevel, territoryIds, territoryParentId, {
+          signal: abortController.signal,
+        });
 
         if (isCancelled) {
           return;
@@ -1154,6 +1161,10 @@ export function MapView({
 
         runWhenStyleIsReady(mapInstance, applyData);
       } catch (caughtError) {
+        if (isAbortError(caughtError)) {
+          return;
+        }
+
         if (!isCancelled) {
           setLegend(null);
           onDataError?.(
@@ -1167,6 +1178,7 @@ export function MapView({
 
     return () => {
       isCancelled = true;
+      abortController.abort();
     };
   }, [onDataError, territoryIds, territoryKey, territoryLevel, territoryParentId, territoryParentKey]);
 
@@ -1179,10 +1191,13 @@ export function MapView({
 
     const mapInstance = map;
     let isCancelled = false;
+    const abortController = new AbortController();
 
     async function loadIndicatorValues() {
       try {
-        const data = await fetchIndicatorValues(indicator, year, territoryLevel, territoryIds, territoryParentId);
+        const data = await fetchIndicatorValues(indicator, year, territoryLevel, territoryIds, territoryParentId, {
+          signal: abortController.signal,
+        });
 
         if (isCancelled) {
           return;
@@ -1208,6 +1223,10 @@ export function MapView({
 
         runWhenStyleIsReady(mapInstance, applyData);
       } catch (caughtError) {
+        if (isAbortError(caughtError)) {
+          return;
+        }
+
         if (!isCancelled) {
           setLegend(null);
           onDataError?.(
@@ -1221,6 +1240,7 @@ export function MapView({
 
     return () => {
       isCancelled = true;
+      abortController.abort();
     };
   }, [indicator, onDataError, territoryIds, territoryKey, territoryLevel, territoryParentId, territoryParentKey, year]);
 
@@ -1277,12 +1297,15 @@ export function MapView({
     }
 
     clearTransportRouteData(mapInstance);
+    const abortController = new AbortController();
 
     async function loadTransportRoutes() {
       try {
         const data = composeTransportRouteData(
           filterTransportRouteData(
-            await fetchTransportRoutes(BA_BUS_ROUTES_SOURCE, transportRouteLines),
+            await fetchTransportRoutes(BA_BUS_ROUTES_SOURCE, transportRouteLines, {
+              signal: abortController.signal,
+            }),
             transportRouteLines,
           ),
           transportRouteLines,
@@ -1300,6 +1323,10 @@ export function MapView({
         });
         applyTransportData(data);
       } catch (caughtError) {
+        if (isAbortError(caughtError)) {
+          return;
+        }
+
         if (!isCancelled) {
           onDataError?.(
             caughtError instanceof Error ? caughtError.message : "No se pudieron cargar los recorridos de transporte.",
@@ -1312,6 +1339,7 @@ export function MapView({
 
     return () => {
       isCancelled = true;
+      abortController.abort();
     };
   }, [
     onDataError,

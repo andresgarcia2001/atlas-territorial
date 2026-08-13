@@ -389,6 +389,7 @@ export function App() {
       territoryLevel,
       territoryProvinceId,
       territoryParentId,
+      territoryLayerMode: territoryLevel === "electoral_circuit" ? "visible" : draftLayer.territoryLayerMode,
       territoryIds: [],
     });
     setTerritorySearch("");

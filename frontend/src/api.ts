@@ -12,6 +12,10 @@ import type {
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+type RequestOptions = {
+  signal?: AbortSignal;
+};
+
 export async function fetchTerritoryLevels() {
   const response = await fetch(`${API_URL}/territory-levels`);
 
@@ -80,9 +84,12 @@ export async function fetchTerritories(
   level: TerritoryLevelId,
   territoryIds: string[] = [],
   parentId?: string | null,
+  options: RequestOptions = {},
 ) {
   const searchParams = buildTerritorySearchParams(level, territoryIds, parentId);
-  const response = await fetch(`${API_URL}/territories?${searchParams.toString()}`);
+  const response = await fetch(`${API_URL}/territories?${searchParams.toString()}`, {
+    signal: options.signal,
+  });
 
   if (!response.ok) {
     throw new Error("No se pudieron cargar las geometrías territoriales.");
@@ -97,12 +104,15 @@ export async function fetchIndicatorValues(
   level: TerritoryLevelId,
   territoryIds: string[] = [],
   parentId?: string | null,
+  options: RequestOptions = {},
 ) {
   const searchParams = buildTerritorySearchParams(level, territoryIds, parentId);
   searchParams.set("indicator", indicator);
   searchParams.set("year", year.toString());
 
-  const response = await fetch(`${API_URL}/indicator-values?${searchParams.toString()}`);
+  const response = await fetch(`${API_URL}/indicator-values?${searchParams.toString()}`, {
+    signal: options.signal,
+  });
 
   if (!response.ok) {
     throw new Error("No se pudieron cargar los valores del indicador.");
@@ -117,6 +127,7 @@ export async function fetchMapData(
   level: TerritoryLevelId,
   territoryIds: string[] = [],
   parentId?: string | null,
+  options: RequestOptions = {},
 ) {
   const searchParams = new URLSearchParams({
     indicator,
@@ -132,7 +143,9 @@ export async function fetchMapData(
     searchParams.append("territory_ids", territoryId);
   }
 
-  const response = await fetch(`${API_URL}/map-data?${searchParams.toString()}`);
+  const response = await fetch(`${API_URL}/map-data?${searchParams.toString()}`, {
+    signal: options.signal,
+  });
 
   if (!response.ok) {
     throw new Error("No se pudieron cargar los datos del mapa.");
@@ -141,7 +154,7 @@ export async function fetchMapData(
   return (await response.json()) as MapData;
 }
 
-export async function fetchTransportRoutes(source?: string, lines: string[] = []) {
+export async function fetchTransportRoutes(source?: string, lines: string[] = [], options: RequestOptions = {}) {
   const searchParams = new URLSearchParams();
 
   if (source) {
@@ -153,7 +166,9 @@ export async function fetchTransportRoutes(source?: string, lines: string[] = []
   }
 
   const query = searchParams.toString();
-  const response = await fetch(`${API_URL}/transport-routes${query ? `?${query}` : ""}`);
+  const response = await fetch(`${API_URL}/transport-routes${query ? `?${query}` : ""}`, {
+    signal: options.signal,
+  });
 
   if (!response.ok) {
     throw new Error("No se pudieron cargar los recorridos de transporte.");
