@@ -314,6 +314,10 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.height-mode-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .segment {
   min-height: 36px;
   color: #4b5d54;
@@ -531,6 +535,7 @@ button {
   }
 
   .control-grid,
+  .height-mode-list,
   .indicator-list,
   .parent-territory-list,
   .territory-list,

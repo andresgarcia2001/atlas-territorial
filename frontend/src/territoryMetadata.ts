@@ -15,6 +15,7 @@ export const DEFAULT_LAYER_SETTINGS: LayerSettings = {
   colorMode: "indicator",
   viewMode: "flat",
   geometryMode: "surface",
+  heightMode: "visual",
   territoryLayerMode: "hidden",
   transportOverlay: "none",
   transportRouteLines: [],
@@ -34,6 +35,7 @@ export function areLayerSettingsEqual(first: LayerSettings, second: LayerSetting
     first.colorMode === second.colorMode &&
     first.viewMode === second.viewMode &&
     first.geometryMode === second.geometryMode &&
+    first.heightMode === second.heightMode &&
     first.territoryLayerMode === second.territoryLayerMode &&
     first.transportOverlay === second.transportOverlay &&
     areArraysEqual(first.transportRouteLines, second.transportRouteLines) &&

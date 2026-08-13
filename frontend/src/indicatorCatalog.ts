@@ -16,7 +16,7 @@ export const INDICATOR_GROUPS: IndicatorGroup[] = [
     id: "population",
     label: "Población",
     indicators: [
-      { id: "poblacion_total", label: "Total" },
+      { id: "poblacion_total", label: "Población total" },
       { id: "mujeres", label: "Mujeres" },
       { id: "varones", label: "Varones" },
       { id: "otro_x", label: "Otro / X" },

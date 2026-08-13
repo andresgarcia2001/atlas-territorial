@@ -85,6 +85,8 @@ export type MapProperties = TerritoryProperties & {
   indicator: string;
   value: number | null;
   year: number;
+  bar_height?: number;
+  surface_height?: number;
   territory_color?: string;
 };
 
@@ -139,6 +141,8 @@ export type ViewMode = "flat" | "extruded";
 
 export type GeometryMode = "surface" | "bars";
 
+export type HeightMode = "indicator" | "uniform" | "visual";
+
 export type TerritoryLayerMode = "visible" | "hidden";
 
 export type TransportOverlayMode = "none" | "ba_bus_routes";
@@ -148,6 +152,7 @@ export type LayerSettings = {
   colorMode: ColorMode;
   viewMode: ViewMode;
   geometryMode: GeometryMode;
+  heightMode: HeightMode;
   territoryLayerMode: TerritoryLayerMode;
   transportOverlay: TransportOverlayMode;
   transportRouteLines: string[];

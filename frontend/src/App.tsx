@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
 import { fetchIndicators, fetchTerritoryLevels, fetchTerritoryOptions, fetchTransportRouteLines } from "./api";
 import { MapView } from "./components/MapView";
-import { getAvailableIndicatorGroups, getIndicatorOption, type IndicatorOption } from "./indicatorCatalog";
+import { getAvailableIndicatorGroups, getIndicatorLabel, getIndicatorOption, type IndicatorOption } from "./indicatorCatalog";
 import {
   DEFAULT_LAYER_SETTINGS,
   FALLBACK_TERRITORY_LEVELS,
@@ -28,6 +28,7 @@ import {
 import type {
   ColorMode,
   GeometryMode,
+  HeightMode,
   LayerSettings,
   TerritoryLevel,
   TerritoryLevelId,
@@ -55,6 +56,20 @@ const GEOMETRY_MODE_LABELS: Record<GeometryMode, string> = {
   surface: "Relieve",
   bars: "Barras",
 };
+
+const HEIGHT_MODE_LABELS: Record<HeightMode, string> = {
+  indicator: "Dato elegido",
+  uniform: "Uniforme",
+  visual: "Visual",
+};
+
+function getHeightModeLabel(heightMode: HeightMode, indicatorLabel: string, hasIndicators: boolean) {
+  if (heightMode === "indicator") {
+    return hasIndicators ? indicatorLabel : "Sin datos";
+  }
+
+  return HEIGHT_MODE_LABELS[heightMode];
+}
 
 const TERRITORY_LAYER_LABELS: Record<TerritoryLayerMode, string> = {
   visible: "Visible",
@@ -92,13 +107,21 @@ export function App() {
   const appliedIndicators = indicatorsByLevel[appliedLayer.territoryLevel] ?? indicators;
   const availableIndicatorGroups = useMemo(() => getAvailableIndicatorGroups(indicators), [indicators]);
   const appliedIndicatorGroups = useMemo(() => getAvailableIndicatorGroups(appliedIndicators), [appliedIndicators]);
+  const hasDraftIndicators = indicators.length > 0;
+  const hasAppliedIndicators = appliedIndicators.length > 0;
   const selectedDraftIndicator =
     getIndicatorOption(draftLayer.indicator, availableIndicatorGroups) ??
     availableIndicatorGroups[0]?.indicators[0] ??
-    ({ id: draftLayer.indicator, label: draftLayer.indicator } satisfies IndicatorOption);
+    ({
+      id: draftLayer.indicator,
+      label: hasDraftIndicators ? getIndicatorLabel(draftLayer.indicator) : "Sin indicadores",
+    } satisfies IndicatorOption);
   const selectedAppliedIndicator =
     getIndicatorOption(appliedLayer.indicator, appliedIndicatorGroups) ??
-    ({ id: appliedLayer.indicator, label: appliedLayer.indicator } satisfies IndicatorOption);
+    ({
+      id: appliedLayer.indicator,
+      label: hasAppliedIndicators ? getIndicatorLabel(appliedLayer.indicator) : "Sin indicadores",
+    } satisfies IndicatorOption);
   const selectedDraftLevel =
     territoryLevels.find((level) => level.id === draftLayer.territoryLevel) ?? FALLBACK_TERRITORY_LEVELS[0];
   const selectedAppliedLevel =
@@ -211,6 +234,13 @@ export function App() {
               ...currentOptions,
               [optionsKey]: EMPTY_TERRITORY_OPTIONS,
             }));
+            if (loadedIndicators.length === 0) {
+              setDraftLayer((currentLayer) =>
+                currentLayer.territoryLevel === level && currentLayer.heightMode === "indicator"
+                  ? { ...currentLayer, heightMode: DEFAULT_LAYER_SETTINGS.heightMode }
+                  : currentLayer,
+              );
+            }
           }
         })
         .catch((caughtError: Error) => {
@@ -248,6 +278,10 @@ export function App() {
               ...currentLayer,
               indicator: getDefaultIndicator(loadedIndicators),
               colorMode: getDefaultColorMode(loadedIndicators),
+              heightMode:
+                loadedIndicators.length === 0 && currentLayer.heightMode === "indicator"
+                  ? DEFAULT_LAYER_SETTINGS.heightMode
+                  : currentLayer.heightMode,
             };
           });
           setMetadataError(null);
@@ -495,28 +529,32 @@ export function App() {
             <span>{selectedDraftIndicator.label}</span>
           </div>
 
-          <div className="indicator-groups">
-            {availableIndicatorGroups.map((group) => (
-              <div className="indicator-group" key={group.id}>
-                <h2>{group.label}</h2>
-                <div className="indicator-list">
-                  {group.indicators.map((option) => (
-                    <button
-                      aria-pressed={option.id === draftLayer.indicator}
-                      className={
-                        option.id === draftLayer.indicator ? "indicator-button is-active" : "indicator-button"
-                      }
-                      key={option.id}
-                      type="button"
-                      onClick={() => updateDraftLayer({ indicator: option.id })}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+          {availableIndicatorGroups.length === 0 ? (
+            <p className="empty-state">Sin indicadores para este nivel</p>
+          ) : (
+            <div className="indicator-groups">
+              {availableIndicatorGroups.map((group) => (
+                <div className="indicator-group" key={group.id}>
+                  <h2>{group.label}</h2>
+                  <div className="indicator-list">
+                    {group.indicators.map((option) => (
+                      <button
+                        aria-pressed={option.id === draftLayer.indicator}
+                        className={
+                          option.id === draftLayer.indicator ? "indicator-button is-active" : "indicator-button"
+                        }
+                        key={option.id}
+                        type="button"
+                        onClick={() => updateDraftLayer({ indicator: option.id })}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {shouldShowProvinceTerritoryFilter && (
@@ -695,6 +733,42 @@ export function App() {
           </div>
         </section>
 
+        {draftLayer.viewMode === "extruded" && (
+          <section className="control-block" aria-labelledby="height-mode-heading">
+            <div className="control-title">
+              <label id="height-mode-heading">Altura 3D</label>
+              <span>{getHeightModeLabel(draftLayer.heightMode, selectedDraftIndicator.label, hasDraftIndicators)}</span>
+            </div>
+            <div className="segmented height-mode-list" role="group" aria-label="Altura 3D">
+              <button
+                aria-pressed={draftLayer.heightMode === "indicator"}
+                className={draftLayer.heightMode === "indicator" ? "segment is-active" : "segment"}
+                disabled={!hasDraftIndicators}
+                type="button"
+                onClick={() => updateDraftLayer({ heightMode: "indicator" })}
+              >
+                Dato elegido
+              </button>
+              <button
+                aria-pressed={draftLayer.heightMode === "uniform"}
+                className={draftLayer.heightMode === "uniform" ? "segment is-active" : "segment"}
+                type="button"
+                onClick={() => updateDraftLayer({ heightMode: "uniform" })}
+              >
+                Uniforme
+              </button>
+              <button
+                aria-pressed={draftLayer.heightMode === "visual"}
+                className={draftLayer.heightMode === "visual" ? "segment is-active" : "segment"}
+                type="button"
+                onClick={() => updateDraftLayer({ heightMode: "visual" })}
+              >
+                Visual
+              </button>
+            </div>
+          </section>
+        )}
+
         <section className="control-block" aria-labelledby="territory-layer-heading">
           <div className="control-title">
             <label id="territory-layer-heading">Mapa territorial</label>
@@ -810,6 +884,12 @@ export function App() {
             Nivel: {selectedAppliedLevel.label} - Color: {COLOR_MODE_LABELS[appliedLayer.colorMode]} - Vista:{" "}
             {VIEW_MODE_LABELS[appliedLayer.viewMode]} - 3D: {GEOMETRY_MODE_LABELS[appliedLayer.geometryMode]}
           </p>
+          {appliedLayer.viewMode === "extruded" && (
+            <p>
+              Altura 3D:{" "}
+              {getHeightModeLabel(appliedLayer.heightMode, selectedAppliedIndicator.label, hasAppliedIndicators)}
+            </p>
+          )}
           <p>Mapa territorial: {TERRITORY_LAYER_LABELS[appliedLayer.territoryLayerMode]}</p>
           <p>Overlay: {TRANSPORT_OVERLAY_LABELS[appliedLayer.transportOverlay]}</p>
           {appliedLayer.transportOverlay === "ba_bus_routes" && (
@@ -833,6 +913,7 @@ export function App() {
         indicator={appliedLayer.indicator}
         onDataError={setMapError}
         geometryMode={appliedLayer.geometryMode}
+        heightMode={appliedLayer.heightMode}
         territoryLayerMode={appliedLayer.territoryLayerMode}
         transportAvailableLines={availableTransportRouteLines}
         transportOverlay={appliedLayer.transportOverlay}

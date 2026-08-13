@@ -20,6 +20,7 @@ import {
 import type {
   ColorMode,
   GeometryMode,
+  HeightMode,
   IndicatorValue,
   LayerSettings,
   MapData,
@@ -38,6 +39,12 @@ type MapViewProps = LayerSettings & {
 };
 
 type StyleExpression = unknown[];
+
+type ValueStats = {
+  hasValues: boolean;
+  min: number;
+  max: number;
+};
 
 type LoadedTerritoryData = {
   data: TerritoryData;
@@ -229,14 +236,84 @@ function getValueRange(data: MapData) {
   return { min, max };
 }
 
-function getTerritoryColor(territoryId: string) {
+function getTerritoryHash(territoryId: string) {
   let hash = 0;
 
   for (let index = 0; index < territoryId.length; index += 1) {
     hash = (hash * 31 + territoryId.charCodeAt(index)) >>> 0;
   }
 
+  return hash;
+}
+
+function getTerritoryColor(territoryId: string) {
+  const hash = getTerritoryHash(territoryId);
+
   return TERRITORY_COLORS[hash % TERRITORY_COLORS.length];
+}
+
+function getValueStats(values: Array<number | null>): ValueStats {
+  let hasValues = false;
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+
+  for (const value of values) {
+    if (value === null) {
+      continue;
+    }
+
+    hasValues = true;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+
+  return hasValues ? { hasValues, min, max } : { hasValues: false, min: 0, max: 1 };
+}
+
+function getHeightScale(indicator: string) {
+  if (indicator.startsWith("porcentaje_")) {
+    return {
+      barMax: 56000,
+      barMin: 7000,
+      surfaceMax: 1450,
+      surfaceMin: 180,
+    };
+  }
+
+  return {
+    barMax: 160000,
+    barMin: 12000,
+    surfaceMax: 7600,
+    surfaceMin: 260,
+  };
+}
+
+function interpolateHeight(min: number, max: number, ratio: number) {
+  return Math.round(min + (max - min) * ratio);
+}
+
+function getFallbackHeightRatio(territoryId: string) {
+  return 0.32 + ((getTerritoryHash(territoryId) % 1000) / 1000) * 0.5;
+}
+
+function getHeightRatio(territoryId: string, value: number | null, stats: ValueStats, heightMode: HeightMode) {
+  if (heightMode === "uniform") {
+    return 0.5;
+  }
+
+  if (heightMode === "visual") {
+    return getFallbackHeightRatio(territoryId);
+  }
+
+  if (!stats.hasValues || value === null) {
+    return 0.08;
+  }
+
+  if (stats.min === stats.max) {
+    return 0.62;
+  }
+
+  return 0.18 + ((value - stats.min) / (stats.max - stats.min)) * 0.82;
 }
 
 function getValueByTerritoryId(values: IndicatorValue[]) {
@@ -247,20 +324,32 @@ function composeMapData(
   territoryData: TerritoryData,
   valueByTerritoryId: Map<string, number | null>,
   indicator: string,
+  heightMode: HeightMode,
   year: number,
 ): MapData {
+  const values = territoryData.features.map((feature) => valueByTerritoryId.get(feature.properties.id) ?? null);
+  const valueStats = getValueStats(values);
+  const heightScale = getHeightScale(indicator);
+
   return {
     ...territoryData,
-    features: territoryData.features.map((feature) => ({
-      ...feature,
-      properties: {
-        ...feature.properties,
-        indicator,
-        value: valueByTerritoryId.get(feature.properties.id) ?? null,
-        year,
-        territory_color: getTerritoryColor(feature.properties.id),
-      },
-    })),
+    features: territoryData.features.map((feature, index) => {
+      const value = values[index];
+      const heightRatio = getHeightRatio(feature.properties.id, value, valueStats, heightMode);
+
+      return {
+        ...feature,
+        properties: {
+          ...feature.properties,
+          bar_height: interpolateHeight(heightScale.barMin, heightScale.barMax, heightRatio),
+          indicator,
+          surface_height: interpolateHeight(heightScale.surfaceMin, heightScale.surfaceMax, heightRatio),
+          value,
+          year,
+          territory_color: getTerritoryColor(feature.properties.id),
+        },
+      };
+    }),
   };
 }
 
@@ -346,32 +435,12 @@ function getColorExpression(colorMode: ColorMode, min: number, max: number): Sty
   ];
 }
 
-function getSurfaceHeightExpression(indicator: string, min: number, max: number): StyleExpression {
-  const maxHeight = indicator.startsWith("porcentaje_") ? 320 : 1400;
-
-  return [
-    "interpolate",
-    ["linear"],
-    ["coalesce", ["get", "value"], 0],
-    min,
-    20,
-    max,
-    maxHeight,
-  ];
+function getSurfaceHeightExpression(): StyleExpression {
+  return ["coalesce", ["get", "surface_height"], 80];
 }
 
-function getBarHeightExpression(indicator: string, min: number, max: number): StyleExpression {
-  const maxHeight = indicator.startsWith("porcentaje_") ? 70000 : 120000;
-
-  return [
-    "interpolate",
-    ["linear"],
-    ["coalesce", ["get", "value"], 0],
-    min,
-    8000,
-    max,
-    maxHeight,
-  ];
+function getBarHeightExpression(): StyleExpression {
+  return ["coalesce", ["get", "bar_height"], 8000];
 }
 
 function getFillOpacity(colorMode: ColorMode) {
@@ -505,7 +574,7 @@ function updateTerritoryPaint(
   min: number,
   max: number,
 ) {
-  const { colorMode, indicator } = layerSettings;
+  const { colorMode } = layerSettings;
 
   map.setPaintProperty("territories-fill", "fill-color", getColorExpression(colorMode, min, max));
   map.setPaintProperty("territories-fill", "fill-opacity", getFillOpacity(colorMode));
@@ -514,7 +583,7 @@ function updateTerritoryPaint(
     map.setPaintProperty(
       "territories-extrusion",
       "fill-extrusion-height",
-      getSurfaceHeightExpression(indicator, min, max),
+      getSurfaceHeightExpression(),
     );
   }
 
@@ -523,7 +592,7 @@ function updateTerritoryPaint(
     map.setPaintProperty(
       "territory-bars-extrusion",
       "fill-extrusion-height",
-      getBarHeightExpression(indicator, min, max),
+      getBarHeightExpression(),
     );
   }
 
@@ -579,7 +648,6 @@ function addTerritoryLayers(
   map: maplibregl.Map,
   data: MapData,
   colorMode: ColorMode,
-  indicator: string,
 ) {
   const { min, max } = getValueRange(data);
   const barData = composeBarMapData(data);
@@ -613,9 +681,10 @@ function addTerritoryLayers(
     },
     paint: {
       "fill-extrusion-color": getColorExpression(colorMode, min, max) as never,
-      "fill-extrusion-height": getSurfaceHeightExpression(indicator, min, max) as never,
+      "fill-extrusion-height": getSurfaceHeightExpression() as never,
       "fill-extrusion-base": 0,
-      "fill-extrusion-opacity": 0.58,
+      "fill-extrusion-opacity": 0.72,
+      "fill-extrusion-vertical-gradient": true,
     },
   });
 
@@ -641,9 +710,10 @@ function addTerritoryLayers(
     },
     paint: {
       "fill-extrusion-color": getColorExpression(colorMode, min, max) as never,
-      "fill-extrusion-height": getBarHeightExpression(indicator, min, max) as never,
+      "fill-extrusion-height": getBarHeightExpression() as never,
       "fill-extrusion-base": 0,
       "fill-extrusion-opacity": 0.94,
+      "fill-extrusion-vertical-gradient": true,
     },
   });
 
@@ -667,7 +737,8 @@ function addTerritoryLayers(
     source: TERRITORY_SOURCE_ID,
     paint: {
       "line-color": "#f9fafb",
-      "line-width": 1.2,
+      "line-opacity": 0.88,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.8, 10, 1.4, 14, 2.2],
     },
   });
 
@@ -963,7 +1034,7 @@ function renderTerritoryData(
     barSource?.setData(barData);
     updateTerritoryPaint(map, loadedData, layerSettings, min, max);
   } else {
-    addTerritoryLayers(map, loadedData, layerSettings.colorMode, layerSettings.indicator);
+    addTerritoryLayers(map, loadedData, layerSettings.colorMode);
   }
 
   if (shouldFitMap) {
@@ -983,6 +1054,7 @@ function renderTerritoryData(
 export function MapView({
   colorMode,
   geometryMode,
+  heightMode,
   indicator,
   onDataError,
   territoryLayerMode,
@@ -1005,6 +1077,7 @@ export function MapView({
   const latestLayerSettingsRef = useRef<LayerSettings>({
     colorMode,
     geometryMode,
+    heightMode,
     indicator,
     territoryLayerMode,
     transportOverlay,
@@ -1031,6 +1104,7 @@ export function MapView({
   latestLayerSettingsRef.current = {
     colorMode,
     geometryMode,
+    heightMode,
     indicator,
     territoryLayerMode,
     transportOverlay,
@@ -1062,7 +1136,13 @@ export function MapView({
     }
 
     const layerSettings = latestLayerSettingsRef.current;
-    const data = composeMapData(territoryData.data, indicatorValues.valueByTerritoryId, indicator, year);
+    const data = composeMapData(
+      territoryData.data,
+      indicatorValues.valueByTerritoryId,
+      indicator,
+      layerSettings.heightMode,
+      year,
+    );
 
     renderedDataRef.current = {
       ...indicatorValues,
@@ -1087,6 +1167,12 @@ export function MapView({
         container: containerRef.current,
         style: {
           version: 8,
+          light: {
+            anchor: "viewport",
+            color: "#ffffff",
+            intensity: 0.58,
+            position: [1.2, 210, 35],
+          },
           sources: {
             osm: {
               type: "raster",
@@ -1107,6 +1193,7 @@ export function MapView({
         zoom: 3.6,
         pitch: 0,
         bearing: 0,
+        maxPitch: 72,
       });
 
       map.addControl(new maplibregl.NavigationControl(), "top-right");
@@ -1353,16 +1440,21 @@ export function MapView({
 
   useEffect(() => {
     const map = mapRef.current;
-    const loadedData = renderedDataRef.current;
+    const territoryData = loadedTerritoryDataRef.current;
+    const indicatorValues = loadedIndicatorValuesRef.current;
 
     if (
       !map ||
-      !loadedData ||
-      loadedData.indicator !== indicator ||
-      loadedData.territoryParentKey !== territoryParentKey ||
-      loadedData.territoryKey !== territoryKey ||
-      loadedData.territoryLevel !== territoryLevel ||
-      loadedData.year !== year
+      !territoryData ||
+      !indicatorValues ||
+      territoryData.territoryParentKey !== territoryParentKey ||
+      territoryData.territoryKey !== territoryKey ||
+      territoryData.territoryLevel !== territoryLevel ||
+      indicatorValues.indicator !== indicator ||
+      indicatorValues.territoryParentKey !== territoryParentKey ||
+      indicatorValues.territoryKey !== territoryKey ||
+      indicatorValues.territoryLevel !== territoryLevel ||
+      indicatorValues.year !== year
     ) {
       return;
     }
@@ -1370,6 +1462,7 @@ export function MapView({
     const layerSettings = {
       colorMode,
       geometryMode,
+      heightMode,
       indicator,
       territoryLayerMode,
       transportOverlay,
@@ -1380,11 +1473,24 @@ export function MapView({
       territoryProvinceId,
       viewMode,
     };
-    renderTerritoryData(map, loadedData.data, layerSettings, false);
-    setLegend(getLegend(loadedData.data, layerSettings));
+    const data = composeMapData(
+      territoryData.data,
+      indicatorValues.valueByTerritoryId,
+      indicator,
+      heightMode,
+      year,
+    );
+
+    renderedDataRef.current = {
+      ...indicatorValues,
+      data,
+    };
+    renderTerritoryData(map, data, layerSettings, false);
+    setLegend(getLegend(data, layerSettings));
   }, [
     colorMode,
     geometryMode,
+    heightMode,
     indicator,
     territoryIds,
     territoryParentId,

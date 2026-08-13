@@ -11,7 +11,7 @@ describe("indicatorCatalog", () => {
       {
         id: "population",
         label: "Población",
-        indicators: [{ id: "poblacion_total", label: "Total" }],
+        indicators: [{ id: "poblacion_total", label: "Población total" }],
       },
       {
         id: "territory",

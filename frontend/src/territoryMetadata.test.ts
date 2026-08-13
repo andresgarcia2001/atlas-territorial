@@ -64,6 +64,12 @@ describe("territoryMetadata", () => {
     expect(
       areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
         ...DEFAULT_LAYER_SETTINGS,
+        heightMode: "indicator",
+      }),
+    ).toBe(false);
+    expect(
+      areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
+        ...DEFAULT_LAYER_SETTINGS,
         territoryLayerMode: "visible",
       }),
     ).toBe(false);
