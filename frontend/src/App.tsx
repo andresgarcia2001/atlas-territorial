@@ -7,6 +7,7 @@ import {
   DEFAULT_LAYER_SETTINGS,
   FALLBACK_TERRITORY_LEVELS,
   areLayerSettingsEqual,
+  getDefaultHeightMode,
   getDefaultIndicator,
   getDefaultColorMode,
   getDefaultTerritoryParentId,
@@ -60,7 +61,7 @@ const GEOMETRY_MODE_LABELS: Record<GeometryMode, string> = {
 const HEIGHT_MODE_LABELS: Record<HeightMode, string> = {
   indicator: "Dato elegido",
   uniform: "Uniforme",
-  visual: "Visual",
+  visual: "Referencia",
 };
 
 function getHeightModeLabel(heightMode: HeightMode, indicatorLabel: string, hasIndicators: boolean) {
@@ -72,17 +73,18 @@ function getHeightModeLabel(heightMode: HeightMode, indicatorLabel: string, hasI
 }
 
 const TERRITORY_LAYER_LABELS: Record<TerritoryLayerMode, string> = {
-  visible: "Visible",
-  hidden: "Oculto",
+  visible: "Mostrar",
+  hidden: "Ocultar",
 };
 
 const TRANSPORT_OVERLAY_LABELS: Record<TransportOverlayMode, string> = {
-  none: "Sin transporte",
+  none: "Ninguna",
   ba_bus_routes: "Colectivos BA",
 };
 
 const MAX_VISIBLE_TERRITORY_OPTIONS = 240;
 const EMPTY_TERRITORY_OPTIONS: TerritoryOption[] = [];
+type ControlsPlacement = "top" | "side";
 
 function normalizeSearchText(value: string) {
   return value
@@ -100,6 +102,8 @@ export function App() {
   const [draftLayer, setDraftLayer] = useState<LayerSettings>(DEFAULT_LAYER_SETTINGS);
   const [appliedLayer, setAppliedLayer] = useState<LayerSettings>(DEFAULT_LAYER_SETTINGS);
   const [territorySearch, setTerritorySearch] = useState("");
+  const [controlsPlacement, setControlsPlacement] = useState<ControlsPlacement>("side");
+  const [areControlsOpen, setAreControlsOpen] = useState(true);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const [mapError, setMapError] = useState<string | null>(null);
 
@@ -155,10 +159,16 @@ export function App() {
   const selectedAppliedParentTerritory = appliedParentTerritoryOptions.find(
     (territory) => territory.id === appliedLayer.territoryParentId,
   );
-  const territoryOptionsParentId = shouldShowParentTerritoryFilter ? draftLayer.territoryParentId : null;
+  const territoryOptionsParentId = shouldShowParentTerritoryFilter
+    ? draftLayer.territoryParentId
+    : shouldShowProvinceTerritoryFilter
+      ? draftLayer.territoryProvinceId
+      : null;
   const appliedTerritoryOptionsParentId = shouldUseParentTerritoryFilter(appliedLayer.territoryLevel)
     ? appliedLayer.territoryParentId
-    : null;
+    : shouldUseProvinceTerritoryFilter(appliedLayer.territoryLevel)
+      ? appliedLayer.territoryProvinceId
+      : null;
   const territoryOptionsKey = getTerritoryOptionsKey(draftLayer.territoryLevel, territoryOptionsParentId);
   const appliedTerritoryOptionsKey = getTerritoryOptionsKey(
     appliedLayer.territoryLevel,
@@ -183,6 +193,7 @@ export function App() {
       ),
     [availableTransportRouteLines, draftLayer.transportRouteLines],
   );
+  const isGeometryModeEnabled = draftLayer.viewMode === "extruded";
   const hasPendingChanges = !areLayerSettingsEqual(draftLayer, appliedLayer);
   const isMissingRequiredProvinceTerritory =
     shouldShowProvinceTerritoryFilter && !draftLayer.territoryProvinceId;
@@ -219,10 +230,17 @@ export function App() {
   useEffect(() => {
     let isCancelled = false;
     const level = draftLayer.territoryLevel;
-    const parentId = shouldUseParentTerritoryFilter(level) ? draftLayer.territoryParentId : null;
+    const parentId = shouldUseParentTerritoryFilter(level)
+      ? draftLayer.territoryParentId
+      : shouldUseProvinceTerritoryFilter(level)
+        ? draftLayer.territoryProvinceId
+        : null;
     const optionsKey = getTerritoryOptionsKey(level, parentId);
+    const isMissingRequiredParent =
+      (shouldUseParentTerritoryFilter(level) && !draftLayer.territoryParentId) ||
+      (shouldUseProvinceTerritoryFilter(level) && !draftLayer.territoryProvinceId);
 
-    if (shouldUseParentTerritoryFilter(level) && !parentId) {
+    if (isMissingRequiredParent) {
       fetchIndicators(level)
         .then((loadedIndicators) => {
           if (!isCancelled) {
@@ -237,7 +255,7 @@ export function App() {
             if (loadedIndicators.length === 0) {
               setDraftLayer((currentLayer) =>
                 currentLayer.territoryLevel === level && currentLayer.heightMode === "indicator"
-                  ? { ...currentLayer, heightMode: DEFAULT_LAYER_SETTINGS.heightMode }
+                  ? { ...currentLayer, heightMode: getDefaultHeightMode(loadedIndicators) }
                   : currentLayer,
               );
             }
@@ -280,7 +298,7 @@ export function App() {
               colorMode: getDefaultColorMode(loadedIndicators),
               heightMode:
                 loadedIndicators.length === 0 && currentLayer.heightMode === "indicator"
-                  ? DEFAULT_LAYER_SETTINGS.heightMode
+                  ? getDefaultHeightMode(loadedIndicators)
                   : currentLayer.heightMode,
             };
           });
@@ -296,7 +314,7 @@ export function App() {
     return () => {
       isCancelled = true;
     };
-  }, [draftLayer.territoryLevel, draftLayer.territoryParentId]);
+  }, [draftLayer.territoryLevel, draftLayer.territoryParentId, draftLayer.territoryProvinceId]);
 
   useEffect(() => {
     if (shouldUseProvinceTerritoryFilter(draftLayer.territoryLevel) && !draftLayer.territoryProvinceId) {
@@ -311,7 +329,7 @@ export function App() {
   useEffect(() => {
     let isCancelled = false;
 
-    if (!shouldUseProvinceTerritoryFilter(draftLayer.territoryLevel) || !draftLayer.territoryProvinceId) {
+    if (!shouldUseParentTerritoryFilter(draftLayer.territoryLevel) || !draftLayer.territoryProvinceId) {
       return () => {
         isCancelled = true;
       };
@@ -414,6 +432,7 @@ export function App() {
 
   function updateTerritoryLevel(territoryLevel: TerritoryLevelId) {
     const territoryProvinceId = getDefaultTerritoryProvinceId(territoryLevel, provinceTerritoryOptions);
+    const loadedIndicators = indicatorsByLevel[territoryLevel];
     const cachedMunicipalities = territoryProvinceId
       ? territoryOptionsByKey[getTerritoryOptionsKey("municipality", territoryProvinceId)] ?? EMPTY_TERRITORY_OPTIONS
       : EMPTY_TERRITORY_OPTIONS;
@@ -423,6 +442,7 @@ export function App() {
       territoryLevel,
       territoryProvinceId,
       territoryParentId,
+      heightMode: loadedIndicators ? getDefaultHeightMode(loadedIndicators) : DEFAULT_LAYER_SETTINGS.heightMode,
       territoryLayerMode: territoryLevel === "electoral_circuit" ? "visible" : draftLayer.territoryLayerMode,
       territoryIds: [],
     });
@@ -493,15 +513,48 @@ export function App() {
   }
 
   return (
-    <>
-      <aside className="panel" aria-label="Controles del atlas">
+    <div className={`atlas-shell atlas-shell--${controlsPlacement}`}>
+      <aside className={areControlsOpen ? "panel is-open" : "panel is-collapsed"} aria-label="Controles del atlas">
         <header className="panel-header">
-          <span className="eyebrow">Atlas territorial</span>
-          <h1>Territorio Argentino</h1>
-          <p>Indicadores territoriales - Año {YEAR}</p>
+          <div className="panel-title">
+            <span className="eyebrow">Atlas territorial</span>
+            <h1>Territorio Argentino</h1>
+            <p>Indicadores territoriales - Año {YEAR}</p>
+          </div>
+
+          <div className="panel-actions" aria-label="Preferencias del panel">
+            <div className="segmented panel-placement" role="group" aria-label="Ubicación de controles">
+              <button
+                aria-pressed={controlsPlacement === "top"}
+                className={controlsPlacement === "top" ? "segment is-active" : "segment"}
+                type="button"
+                onClick={() => setControlsPlacement("top")}
+              >
+                Arriba
+              </button>
+              <button
+                aria-pressed={controlsPlacement === "side"}
+                className={controlsPlacement === "side" ? "segment is-active" : "segment"}
+                type="button"
+                onClick={() => setControlsPlacement("side")}
+              >
+                Lateral
+              </button>
+            </div>
+            <button
+              aria-expanded={areControlsOpen}
+              className="panel-toggle"
+              type="button"
+              onClick={() => setAreControlsOpen((isOpen) => !isOpen)}
+            >
+              {areControlsOpen ? "Ocultar" : "Mostrar"}
+            </button>
+          </div>
         </header>
 
-        <section className="control-block" aria-labelledby="level-heading">
+        {areControlsOpen && (
+          <div className="panel-body">
+            <section className="control-block" aria-labelledby="level-heading">
           <div className="control-title">
             <label id="level-heading">Nivel territorial</label>
             <span>{selectedDraftLevel.label}</span>
@@ -623,6 +676,7 @@ export function App() {
             <input
               aria-label="Buscar territorio"
               className="territory-search"
+              placeholder="Buscar territorio"
               type="search"
               value={territorySearch}
               onChange={(event) => setTerritorySearch(event.target.value)}
@@ -653,6 +707,7 @@ export function App() {
                 {territory.name}
               </button>
             ))}
+            {territoryOptions.length === 0 && <p className="empty-state">Sin territorios</p>}
             {hiddenTerritoryOptionCount > 0 && (
               <p className="empty-state">{`${visibleTerritoryOptions.length} de ${filteredTerritoryOptions.length}`}</p>
             )}
@@ -708,22 +763,24 @@ export function App() {
             </div>
           </div>
 
-          <div className="control-block is-compact">
+          <div className={isGeometryModeEnabled ? "control-block is-compact" : "control-block is-compact is-disabled"}>
             <div className="control-title">
               <label>3D</label>
             </div>
             <div className="segmented" role="group" aria-label="Geometría 3D">
               <button
-                aria-pressed={draftLayer.geometryMode === "surface"}
-                className={draftLayer.geometryMode === "surface" ? "segment is-active" : "segment"}
+                aria-pressed={isGeometryModeEnabled && draftLayer.geometryMode === "surface"}
+                className={isGeometryModeEnabled && draftLayer.geometryMode === "surface" ? "segment is-active" : "segment"}
+                disabled={!isGeometryModeEnabled}
                 type="button"
                 onClick={() => updateDraftLayer({ geometryMode: "surface" })}
               >
                 Relieve
               </button>
               <button
-                aria-pressed={draftLayer.geometryMode === "bars"}
-                className={draftLayer.geometryMode === "bars" ? "segment is-active" : "segment"}
+                aria-pressed={isGeometryModeEnabled && draftLayer.geometryMode === "bars"}
+                className={isGeometryModeEnabled && draftLayer.geometryMode === "bars" ? "segment is-active" : "segment"}
+                disabled={!isGeometryModeEnabled}
                 type="button"
                 onClick={() => updateDraftLayer({ geometryMode: "bars" })}
               >
@@ -763,7 +820,7 @@ export function App() {
                 type="button"
                 onClick={() => updateDraftLayer({ heightMode: "visual" })}
               >
-                Visual
+                Referencia
               </button>
             </div>
           </section>
@@ -771,17 +828,17 @@ export function App() {
 
         <section className="control-block" aria-labelledby="territory-layer-heading">
           <div className="control-title">
-            <label id="territory-layer-heading">Mapa territorial</label>
+            <label id="territory-layer-heading">Polígonos base</label>
             <span>{TERRITORY_LAYER_LABELS[draftLayer.territoryLayerMode]}</span>
           </div>
-          <div className="segmented" role="group" aria-label="Mapa territorial">
+          <div className="segmented" role="group" aria-label="Polígonos base">
             <button
               aria-pressed={draftLayer.territoryLayerMode === "visible"}
               className={draftLayer.territoryLayerMode === "visible" ? "segment is-active" : "segment"}
               type="button"
               onClick={() => updateDraftLayer({ territoryLayerMode: "visible" })}
             >
-              Visible
+              Mostrar
             </button>
             <button
               aria-pressed={draftLayer.territoryLayerMode === "hidden"}
@@ -789,14 +846,14 @@ export function App() {
               type="button"
               onClick={() => updateDraftLayer({ territoryLayerMode: "hidden" })}
             >
-              Oculto
+              Ocultar
             </button>
           </div>
         </section>
 
         <section className="control-block" aria-labelledby="overlays-heading">
           <div className="control-title">
-            <label id="overlays-heading">Overlays</label>
+            <label id="overlays-heading">Capas adicionales</label>
             <span>{TRANSPORT_OVERLAY_LABELS[draftLayer.transportOverlay]}</span>
           </div>
           <div className="segmented" role="group" aria-label="Capas de transporte">
@@ -806,7 +863,7 @@ export function App() {
               type="button"
               onClick={() => updateDraftLayer({ transportOverlay: "none" })}
             >
-              Ninguno
+              Ninguna
             </button>
             <button
               aria-pressed={draftLayer.transportOverlay === "ba_bus_routes"}
@@ -890,8 +947,8 @@ export function App() {
               {getHeightModeLabel(appliedLayer.heightMode, selectedAppliedIndicator.label, hasAppliedIndicators)}
             </p>
           )}
-          <p>Mapa territorial: {TERRITORY_LAYER_LABELS[appliedLayer.territoryLayerMode]}</p>
-          <p>Overlay: {TRANSPORT_OVERLAY_LABELS[appliedLayer.transportOverlay]}</p>
+          <p>Polígonos base: {TERRITORY_LAYER_LABELS[appliedLayer.territoryLayerMode]}</p>
+          <p>Capa adicional: {TRANSPORT_OVERLAY_LABELS[appliedLayer.transportOverlay]}</p>
           {appliedLayer.transportOverlay === "ba_bus_routes" && (
             <p>Líneas: {getTransportRouteLineSelectionLabel(appliedLayer.transportRouteLines)}</p>
           )}
@@ -906,6 +963,8 @@ export function App() {
 
         {metadataError && <p className="error">{metadataError}</p>}
         {mapError && <p className="error">{mapError}</p>}
+          </div>
+        )}
       </aside>
 
       <MapView
@@ -920,11 +979,11 @@ export function App() {
         transportRouteLines={appliedLayer.transportRouteLines}
         territoryIds={appliedLayer.territoryIds}
         territoryLevel={appliedLayer.territoryLevel}
-        territoryParentId={appliedLayer.territoryParentId}
+        territoryParentId={appliedTerritoryOptionsParentId}
         territoryProvinceId={appliedLayer.territoryProvinceId}
         viewMode={appliedLayer.viewMode}
         year={YEAR}
       />
-    </>
+    </div>
   );
 }

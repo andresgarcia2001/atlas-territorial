@@ -26,6 +26,7 @@ import type {
   MapData,
   MapFeature,
   TerritoryData,
+  TerritoryLevelId,
   TransportRouteGeometry,
   TransportRouteData,
   TransportRouteFeature,
@@ -270,13 +271,22 @@ function getValueStats(values: Array<number | null>): ValueStats {
   return hasValues ? { hasValues, min, max } : { hasValues: false, min: 0, max: 1 };
 }
 
-function getHeightScale(indicator: string) {
+function getHeightScale(territoryLevel: TerritoryLevelId, indicator: string) {
   if (indicator.startsWith("porcentaje_")) {
     return {
       barMax: 56000,
       barMin: 7000,
       surfaceMax: 1450,
       surfaceMin: 180,
+    };
+  }
+
+  if (territoryLevel === "province" && indicator === "poblacion_total") {
+    return {
+      barMax: 220000,
+      barMin: 18000,
+      surfaceMax: 56000,
+      surfaceMin: 6500,
     };
   }
 
@@ -324,12 +334,13 @@ function composeMapData(
   territoryData: TerritoryData,
   valueByTerritoryId: Map<string, number | null>,
   indicator: string,
+  territoryLevel: TerritoryLevelId,
   heightMode: HeightMode,
   year: number,
 ): MapData {
   const values = territoryData.features.map((feature) => valueByTerritoryId.get(feature.properties.id) ?? null);
   const valueStats = getValueStats(values);
-  const heightScale = getHeightScale(indicator);
+  const heightScale = getHeightScale(territoryLevel, indicator);
 
   return {
     ...territoryData,
@@ -1140,6 +1151,7 @@ export function MapView({
       territoryData.data,
       indicatorValues.valueByTerritoryId,
       indicator,
+      territoryLevel,
       layerSettings.heightMode,
       year,
     );
@@ -1477,6 +1489,7 @@ export function MapView({
       territoryData.data,
       indicatorValues.valueByTerritoryId,
       indicator,
+      territoryLevel,
       heightMode,
       year,
     );

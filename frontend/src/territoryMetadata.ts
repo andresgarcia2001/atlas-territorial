@@ -1,5 +1,5 @@
 import { DEFAULT_INDICATOR, getAvailableIndicatorGroups } from "./indicatorCatalog";
-import type { LayerSettings, TerritoryLevel, TerritoryLevelId, TerritoryOption } from "./types";
+import type { HeightMode, LayerSettings, TerritoryLevel, TerritoryLevelId, TerritoryOption } from "./types";
 
 export const DEFAULT_TERRITORY_LEVEL: TerritoryLevelId = "province";
 
@@ -15,7 +15,7 @@ export const DEFAULT_LAYER_SETTINGS: LayerSettings = {
   colorMode: "indicator",
   viewMode: "flat",
   geometryMode: "surface",
-  heightMode: "visual",
+  heightMode: "indicator",
   territoryLayerMode: "hidden",
   transportOverlay: "none",
   transportRouteLines: [],
@@ -24,6 +24,8 @@ export const DEFAULT_LAYER_SETTINGS: LayerSettings = {
   territoryParentId: null,
   territoryIds: [],
 };
+
+export const FALLBACK_HEIGHT_MODE: HeightMode = "visual";
 
 export function areArraysEqual(first: string[], second: string[]) {
   return first.length === second.length && first.every((value, index) => value === second[index]);
@@ -57,12 +59,17 @@ export function getDefaultColorMode(loadedIndicators: string[]) {
   return loadedIndicators.length === 0 ? "territory" : DEFAULT_LAYER_SETTINGS.colorMode;
 }
 
+export function getDefaultHeightMode(loadedIndicators: string[]) {
+  return loadedIndicators.length === 0 ? FALLBACK_HEIGHT_MODE : DEFAULT_LAYER_SETTINGS.heightMode;
+}
+
 export function getInitialLayerSettings(loadedIndicators: string[], territoryLevel: TerritoryLevelId): LayerSettings {
   return {
     ...DEFAULT_LAYER_SETTINGS,
     territoryLevel,
     indicator: getDefaultIndicator(loadedIndicators),
     colorMode: getDefaultColorMode(loadedIndicators),
+    heightMode: getDefaultHeightMode(loadedIndicators),
   };
 }
 
@@ -71,7 +78,7 @@ export function shouldUseParentTerritoryFilter(territoryLevel: TerritoryLevelId)
 }
 
 export function shouldUseProvinceTerritoryFilter(territoryLevel: TerritoryLevelId) {
-  return territoryLevel === "electoral_circuit";
+  return territoryLevel === "municipality" || territoryLevel === "electoral_circuit";
 }
 
 export function getTerritoryOptionsKey(territoryLevel: TerritoryLevelId, parentId: string | null = null) {
@@ -111,10 +118,10 @@ export function getTransportRouteLineSelectionLabel(transportRouteLines: string[
   }
 
   if (transportRouteLines.length === 1) {
-    return `Línea ${transportRouteLines[0]}`;
+    return `Linea ${transportRouteLines[0]}`;
   }
 
-  return `${transportRouteLines.length} líneas`;
+  return `${transportRouteLines.length} lineas`;
 }
 
 export async function getTerritoryLevelsOrFallback(loadTerritoryLevels: () => Promise<TerritoryLevel[]>) {

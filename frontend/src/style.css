@@ -8,11 +8,31 @@ body,
     Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
 #app {
-  display: grid;
-  grid-template-columns: minmax(340px, 392px) minmax(0, 1fr);
   background: #eef2ee;
   color: #17211d;
+}
+
+.atlas-shell {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  background: #eef2ee;
+  color: #17211d;
+}
+
+.atlas-shell--side {
+  grid-template-columns: 304px minmax(0, 1fr);
+}
+
+.atlas-shell--top {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 button {
@@ -22,19 +42,370 @@ button {
 .panel {
   display: flex;
   flex-direction: column;
-  gap: 18px;
-  padding: 22px;
+  gap: 16px;
+  padding: 24px 28px 18px;
+  background: #f6f8f5;
+}
+
+.atlas-shell--side .panel {
+  gap: 0;
+  padding: 0;
   overflow-y: auto;
-  background: #f7f9f6;
-  border-right: 1px solid #d9e2dc;
-  box-shadow: 1px 0 0 rgb(255 255 255 / 0.7) inset;
+  background: #fafbf9;
+  border-right: 1px solid #dfe6e1;
+  box-shadow: none;
+  scrollbar-color: #bac7bf transparent;
+  scrollbar-width: thin;
+}
+
+.atlas-shell--side .panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.atlas-shell--side .panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.atlas-shell--side .panel::-webkit-scrollbar-thumb {
+  background: #bac7bf;
+  border-radius: 0;
+}
+
+.atlas-shell--top .panel {
+  max-height: 44vh;
+  overflow: hidden;
+  border-bottom: 1px solid #d9e2dc;
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.7) inset;
+}
+
+.panel.is-collapsed {
+  gap: 0;
 }
 
 .panel-header {
-  display: grid;
-  gap: 6px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
   padding-bottom: 16px;
   border-bottom: 1px solid #d9e2dc;
+}
+
+.atlas-shell--side .panel-header {
+  display: grid;
+  gap: 12px;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid #e1e7e3;
+}
+
+.panel-title {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.atlas-shell--side .panel-title {
+  gap: 4px;
+}
+
+.panel-actions {
+  display: grid;
+  grid-template-columns: minmax(150px, 180px) max-content;
+  gap: 10px;
+  align-items: center;
+}
+
+.atlas-shell--side .panel-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel-placement {
+  grid-template-columns: 1fr 1fr;
+}
+
+.panel-toggle {
+  min-height: 42px;
+  padding: 0 14px;
+  color: #ffffff;
+  background: #17211d;
+  border: 1px solid #17211d;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 800;
+  white-space: nowrap;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.panel-toggle:hover {
+  background: #26342e;
+  border-color: #26342e;
+  box-shadow: none;
+}
+
+.panel-body {
+  min-height: 0;
+}
+
+.atlas-shell--side .panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 20px 18px;
+}
+
+.atlas-shell--top .panel-body {
+  display: grid;
+  grid-template-columns:
+    minmax(300px, 0.95fr)
+    minmax(310px, 1fr)
+    minmax(340px, 1.15fr)
+    minmax(390px, 1.35fr)
+    minmax(280px, 0.9fr);
+  gap: 18px 26px;
+  align-items: start;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.atlas-shell--top .panel-body > .control-block {
+  min-width: 0;
+}
+
+.atlas-shell--side .eyebrow {
+  color: #0f766e;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.atlas-shell--side .panel h1 {
+  font-size: 19px;
+  line-height: 1.12;
+}
+
+.atlas-shell--side .panel-header p {
+  max-width: 188px;
+  overflow: hidden;
+  color: #64716a;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-shell--side .panel-placement {
+  display: inline-grid;
+  width: auto;
+  max-width: 138px;
+  min-height: 28px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #d7e0da;
+}
+
+.atlas-shell--side .panel-placement .segment {
+  min-height: 28px;
+  justify-content: center;
+  padding: 0 8px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.atlas-shell--side .panel-toggle {
+  width: auto;
+  min-height: 28px;
+  padding: 0 2px;
+  color: #526058;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.atlas-shell--side .panel-toggle:hover {
+  color: #0f766e;
+  background: transparent;
+  border-bottom-color: #0f766e;
+}
+
+.atlas-shell--side .control-block {
+  gap: 7px;
+  padding: 12px 0;
+  border-bottom: 1px solid #e5ebe7;
+}
+
+.atlas-shell--side .control-block:last-of-type {
+  border-bottom: 0;
+}
+
+.atlas-shell--side .control-title {
+  min-height: 18px;
+}
+
+.atlas-shell--side .control-title label {
+  color: #202a25;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.atlas-shell--side .control-title span {
+  max-width: 118px;
+  overflow: hidden;
+  color: #0f766e;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.atlas-shell--side .segmented {
+  gap: 2px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.atlas-shell--side .territory-level-list,
+.atlas-shell--side .height-mode-list,
+.atlas-shell--side .control-grid {
+  grid-template-columns: 1fr;
+}
+
+.atlas-shell--side .control-grid {
+  gap: 8px;
+}
+
+.atlas-shell--side .segment {
+  min-height: 30px;
+  padding: 0 8px 0 10px;
+  color: #4c5b53;
+  font-size: 13px;
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  border-radius: 3px;
+}
+
+.atlas-shell--side .segment:hover {
+  color: #17211d;
+  background: #f3f7f4;
+  border-color: transparent;
+  border-left-color: #cbd8d1;
+}
+
+.atlas-shell--side .segment.is-active {
+  color: #0d5f59;
+  background: #edf7f4;
+  border-color: transparent;
+  border-left-color: #0f766e;
+}
+
+.atlas-shell--side .indicator-group h2 {
+  color: #7a867f;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.atlas-shell--side .indicator-groups {
+  gap: 8px;
+}
+
+.atlas-shell--side .indicator-group {
+  gap: 5px;
+}
+
+.atlas-shell--side .indicator-list,
+.atlas-shell--side .parent-territory-list,
+.atlas-shell--side .territory-list {
+  grid-template-columns: 1fr;
+  gap: 2px;
+}
+
+.atlas-shell--side .parent-territory-list {
+  max-height: 142px;
+}
+
+.atlas-shell--side .territory-list {
+  max-height: 176px;
+}
+
+.atlas-shell--side .indicator-button,
+.atlas-shell--side .territory-button,
+.atlas-shell--side .territory-action {
+  min-height: 30px;
+  padding: 0 8px 0 10px;
+  color: #34433b;
+  background: transparent;
+  border-color: transparent;
+  border-left: 2px solid transparent;
+  border-radius: 3px;
+  font-size: 13px;
+}
+
+.atlas-shell--side .indicator-button:hover,
+.atlas-shell--side .territory-button:hover,
+.atlas-shell--side .territory-action:hover {
+  color: #17211d;
+  background: #f3f7f4;
+  border-color: transparent;
+  border-left-color: #cbd8d1;
+}
+
+.atlas-shell--side .indicator-button.is-active,
+.atlas-shell--side .territory-button.is-active,
+.atlas-shell--side .territory-action.is-active {
+  color: #0d5f59;
+  background: #edf7f4;
+  border-color: transparent;
+  border-left-color: #0f766e;
+}
+
+.atlas-shell--side .territory-search {
+  min-height: 32px;
+  background: #ffffff;
+  border-color: #dce5df;
+  font-size: 13px;
+}
+
+.atlas-shell--side .empty-state {
+  padding: 8px 10px;
+  background: #f8faf8;
+  font-size: 12px;
+}
+
+.atlas-shell--side .apply-button {
+  min-height: 34px;
+  margin-top: 12px;
+  background: #0f766e;
+  border-color: #0f766e;
+  font-size: 13px;
+}
+
+.atlas-shell--side .apply-button:not(:disabled):hover {
+  background: #0d625d;
+  border-color: #0d625d;
+}
+
+.atlas-shell--side .current-layer {
+  margin-top: 12px;
+  padding: 12px 0 0;
+  color: #17211d;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #e1e7e3;
+  border-left: 0;
+  border-radius: 0;
+}
+
+.atlas-shell--side .current-layer strong {
+  font-size: 14px;
 }
 
 .eyebrow {
@@ -61,17 +432,26 @@ button {
 
 .control-block {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .control-block.is-compact {
   align-content: start;
 }
 
+.control-block.is-disabled .control-title label {
+  color: #8a9690;
+}
+
+.control-block.is-disabled .segmented {
+  background: #eef2ef;
+  border-color: #dce4df;
+}
+
 .control-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
 }
 
 .control-title {
@@ -129,7 +509,7 @@ button {
   color: #1f2b26;
   background: #ffffff;
   border: 1px solid #d7e0da;
-  border-radius: 8px;
+  border-radius: 4px;
   cursor: pointer;
   transition:
     background 160ms ease,
@@ -147,7 +527,7 @@ button {
 .territory-action:hover,
 .segment:hover {
   border-color: #0f766e;
-  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.1);
+  box-shadow: none;
 }
 
 .indicator-button.is-active,
@@ -156,7 +536,7 @@ button {
   color: #ffffff;
   background: #0f766e;
   border-color: #0f766e;
-  box-shadow: 0 7px 18px rgb(15 118 110 / 0.18);
+  box-shadow: none;
 }
 
 .territory-actions {
@@ -180,13 +560,13 @@ button {
   color: #1f2b26;
   background: #ffffff;
   border: 1px solid #d7e0da;
-  border-radius: 8px;
+  border-radius: 4px;
   outline: none;
 }
 
 .territory-search:focus {
   border-color: #0f766e;
-  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.1);
+  box-shadow: none;
 }
 
 .territory-list {
@@ -227,7 +607,7 @@ button {
   color: #1f2b26;
   background: #ffffff;
   border: 1px solid #d7e0da;
-  border-radius: 8px;
+  border-radius: 4px;
   cursor: pointer;
   transition:
     background 160ms ease,
@@ -268,16 +648,14 @@ button {
 
 .transport-line-button:hover {
   border-color: var(--line-color, #0f766e);
-  box-shadow: 0 0 0 3px rgb(15 118 110 / 0.1);
+  box-shadow: none;
 }
 
 .transport-line-button.is-active {
   color: #ffffff;
   background: #0f766e;
   border-color: var(--line-color, #0f766e);
-  box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--line-color, #0f766e) 54%, transparent),
-    0 7px 18px rgb(15 118 110 / 0.18);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line-color, #0f766e) 58%, transparent);
 }
 
 .transport-line-button.is-active::before {
@@ -296,18 +674,18 @@ button {
   color: #6d7b73;
   background: #ffffff;
   border: 1px solid #d7e0da;
-  border-radius: 8px;
+  border-radius: 4px;
   font-size: 13px;
 }
 
 .segmented {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 3px;
-  padding: 3px;
+  gap: 0;
+  padding: 2px;
   background: #e6ece8;
   border: 1px solid #d2ddd6;
-  border-radius: 8px;
+  border-radius: 4px;
 }
 
 .territory-level-list {
@@ -323,7 +701,7 @@ button {
   color: #4b5d54;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 3px;
   cursor: pointer;
   transition:
     background 160ms ease,
@@ -335,7 +713,7 @@ button {
   color: #111816;
   background: #ffffff;
   border-color: #ffffff;
-  box-shadow: 0 1px 5px rgb(23 33 29 / 0.12);
+  box-shadow: none;
 }
 
 .segment:disabled {
@@ -344,12 +722,16 @@ button {
   opacity: 0.58;
 }
 
+.segment:disabled:hover {
+  border-color: transparent;
+}
+
 .apply-button {
   min-height: 44px;
   color: #ffffff;
   background: #d33f49;
   border: 1px solid #d33f49;
-  border-radius: 8px;
+  border-radius: 4px;
   cursor: pointer;
   font-weight: 800;
   transition:
@@ -362,7 +744,7 @@ button {
 .apply-button:not(:disabled):hover {
   background: #b8323d;
   border-color: #b8323d;
-  box-shadow: 0 8px 18px rgb(211 63 73 / 0.22);
+  box-shadow: none;
 }
 
 .apply-button:disabled {
@@ -376,11 +758,31 @@ button {
   display: grid;
   gap: 5px;
   padding: 14px;
-  margin-top: auto;
   background: #ffffff;
   border: 1px solid #d7e0da;
   border-left: 4px solid #d33f49;
-  border-radius: 8px;
+  border-radius: 4px;
+}
+
+.atlas-shell--top .current-layer {
+  grid-column: 1 / -1;
+  grid-template-columns: auto minmax(180px, 0.6fr) minmax(320px, 1.4fr);
+  align-items: center;
+  gap: 8px 18px;
+  padding: 10px 0 0;
+  color: #17211d;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #d9e2dc;
+  border-radius: 0;
+}
+
+.atlas-shell--top .current-layer p {
+  display: inline;
+}
+
+.atlas-shell--side .current-layer {
+  margin-top: auto;
 }
 
 .current-layer span {
@@ -452,7 +854,7 @@ button {
   color: #17211d;
   background: rgb(255 255 255 / 0.92);
   border: 1px solid #d7e0da;
-  border-radius: 8px;
+  border-radius: 4px;
   box-shadow: 0 14px 35px rgb(23 33 29 / 0.18);
 }
 
@@ -493,7 +895,7 @@ button {
 .maplibregl-popup-content {
   padding: 14px 16px;
   color: #17211d;
-  border-radius: 8px;
+  border-radius: 4px;
   box-shadow: 0 14px 35px rgb(23 33 29 / 0.2);
 }
 
@@ -510,7 +912,9 @@ button {
 }
 
 @media (max-width: 900px) {
-  #app {
+  .atlas-shell,
+  .atlas-shell--side,
+  .atlas-shell--top {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(420px, 1fr);
   }
@@ -519,6 +923,22 @@ button {
     max-height: 54vh;
     border-right: 0;
     border-bottom: 1px solid #d9e2dc;
+  }
+
+  .panel-header,
+  .panel-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-header {
+    display: grid;
+  }
+
+  .atlas-shell--top .panel-body,
+  .atlas-shell--side .panel-body {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-y: auto;
   }
 
   .indicator-list,
@@ -532,6 +952,11 @@ button {
 @media (max-width: 560px) {
   .panel {
     padding: 18px;
+  }
+
+  .atlas-shell--top .panel-body,
+  .atlas-shell--side .panel-body {
+    grid-template-columns: 1fr;
   }
 
   .control-grid,
