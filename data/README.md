@@ -1,6 +1,6 @@
 # Data sources and territorial identifiers
 
-Last reviewed: 2026-08-13.
+Last reviewed: 2026-08-17.
 
 This project keeps source GeoJSON files under `data/`, but database identifiers
 must be stable across source refreshes. Do not use source row order or `gid` as a
@@ -32,6 +32,46 @@ canonical territorial id when a national code is available.
   (`numberMatched`, `numberReturned`, `timeStamp`) but not the original direct
   download URL. Treat the file as an included seed dataset and cite both the IGN
   layer catalog and the INDEC Censo 2022 statistical source.
+
+### `c2022_tp_gobierno_local_c1.csv`
+
+- Level loaded as indicators on existing `municipality` territories.
+- Source context: INDEC / Censo Nacional de Poblacion, Hogares y Viviendas 2022,
+  cuadro `Total del pais. Total de viviendas y de poblacion, segun gobierno
+  local. Año 2022`.
+- Source link:
+  `https://censo.gob.ar/index.php/gobiernos-locales/`
+- Current inspected fields: `CODGL`, `Viv`, `Pob`, `Viv_par`, `Pob_viv_part`,
+  `Viv_col`, `Pob_viv_col`, `Pob_sit_calle`.
+- Indicators loaded from this file:
+  - `viviendas_total` from `Viv`
+  - `poblacion_total` from `Pob`
+  - `viviendas_particulares` from `Viv_par`
+  - `poblacion_viviendas_particulares` from `Pob_viv_part`
+  - `viviendas_colectivas` from `Viv_col`
+  - `poblacion_viviendas_colectivas` from `Pob_viv_col`
+  - `poblacion_situacion_calle` from `Pob_sit_calle`
+- Join rule: `CODGL` is normalized to six digits and matched against the atlas
+  municipality id. Example: `60007` becomes `municipio_060007`.
+- Important caveat: these values are official government-local/municipality
+  indicators. They must not be interpreted as electoral-circuit indicators.
+
+### `local_government_municipality_unmatched.csv`
+
+- Purpose: audit file for the crosswalk between INDEC government-local
+  population rows and loaded atlas municipality geometries.
+- Generated with:
+  `python scripts/report_local_government_crosswalk.py --population-xlsx <official INDEC XLSX>`.
+- Row types:
+  - `population_without_loaded_municipality_geometry`: the INDEC row exists, but
+    no loaded atlas municipality has the same normalized `CODGL`.
+  - `loaded_municipality_geometry_without_population`: the atlas geometry exists,
+    but the INDEC government-local population file has no matching `CODGL`.
+- Rows may include `possible_counterpart_*` fields when the same province/name
+  appears on the other side of the crosswalk with a different code. These rows
+  need manual review before adding an override.
+- This report is not loaded as map data. It is an audit artifact used to avoid
+  assigning population values to the wrong polygon.
 
 ## IGN municipality layer inspection
 

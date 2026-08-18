@@ -23,6 +23,7 @@ describe("indicatorCatalog", () => {
 
   it("keeps unknown indicators readable instead of failing", () => {
     expect(getIndicatorOption("superficie_km2")).toBeUndefined();
+    expect(getIndicatorLabel("poblacion_viviendas_particulares")).toBe("Población en viviendas particulares");
     expect(getIndicatorLabel("superficie_km2")).toBe("superficie km2");
   });
 });

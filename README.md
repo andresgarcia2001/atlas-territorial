@@ -52,6 +52,7 @@ Fuentes usadas actualmente:
 | --- | --- | --- | --- |
 | Provincias con poblacion del Censo 2022 | `data/poblacion_provincias_indec_2022.geojson` | Geometria provincial e indicadores `poblacion_total`, `mujeres`, `varones` y `otro_x`. | Capa publicada por IGN en [Capas SIG](https://www.ign.gob.ar/NuestrasActividades/InformacionGeoespacial/CapasSIG) como `Poblacion por provincia CNPHyV 2022 (provisorio)`, con datos censales del [INDEC - Censo 2022](https://www.indec.gob.ar/indec/web/Nivel4-Tema-2-18-77). |
 | Municipios, comunas, juntas y gobiernos locales disponibles en IGN | WFS `ign:municipio`, normalizado en `data/municipios_ign.geojson` | Poligonos municipales/locales para el mapa. | [IGN WFS GetCapabilities](https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetCapabilities) y descarga GeoJSON con `typeName=ign:municipio`: [GetFeature](https://wms.ign.gob.ar/geoserver/ows?service=wfs&version=1.1.0&request=GetFeature&typeName=ign:municipio&outputFormat=application/json&srsName=EPSG:4326). |
+| Poblacion y viviendas por gobierno local, Censo 2022 | `data/c2022_tp_gobierno_local_c1.csv` | Indicadores municipales `poblacion_total`, `poblacion_viviendas_particulares`, viviendas y poblacion en viviendas colectivas/situacion de calle. | [INDEC / Censo 2022 - Gobiernos locales](https://censo.gob.ar/index.php/gobiernos-locales/), cuadro `Total del pais. Total de viviendas y de poblacion, segun gobierno local. Año 2022`. |
 | Gobiernos locales de Santiago del Estero y validacion externa de codigos | `gobiernos-locales.geojson` de Georef | Suplemento de poligonos faltantes para Santiago del Estero y verificacion de casos con `in1` faltante o duplicado. | [Georef - descarga de base completa](https://www.argentina.gob.ar/georef/descarga-de-la-base-completa) y endpoint usado: [gobiernos-locales.geojson](https://apis.datos.gob.ar/georef/api/v2.0/gobiernos-locales.geojson). |
 | Codigos geograficos de referencia | No se carga como dataset independiente | Referencia conceptual para interpretar codigos territoriales nacionales. | [INDEC - Codigos geograficos del Censo 2022](https://redatam.indec.gob.ar/redarg/CENSOS/CPV2022/Docs/codcart.htm). |
 | Circuitos electorales de Argentina | `data/circuitos_electorales_2025.geojson`, generado con `scripts/prepare_electoral_circuits.py` | Nivel `electoral_circuit` para mapear circuitos electorales por provincia. | Dataset [tartagalensis/circuitos_electorales_AR](https://github.com/tartagalensis/circuitos_electorales_AR), publicado por Franco Galeano como `circuitos_electorales_AR: circuitos electorales de la Republica Argentina`, version `2025.1`, licencia [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). |
@@ -68,6 +69,10 @@ Tratamientos y fusiones aplicadas:
 - Georef tambien se usa como fuente de contraste para correcciones puntuales:
   cuatro `in1` faltantes fueron completados por coincidencia de nombre y
   contencion espacial; `Hardy` se recodifico de `822784` a `822808`.
+- El CSV de gobiernos locales de INDEC se une a municipios mediante `CODGL`
+  normalizado a seis digitos, por ejemplo `60007` -> `municipio_060007`. Estos
+  indicadores son municipales: no se distribuyen ni estiman por circuito
+  electoral.
 - Los dos poligonos IGN de `Machagai` comparten el mismo `in1 = 220476`; se
   fusionaron en un unico `MultiPolygon` para preservar ambas partes de la
   geometria y evitar duplicados.
@@ -411,6 +416,16 @@ El dataset provincial incluido carga indicadores crudos:
 - `mujeres` desde `mftvp`
 - `varones` desde `vmtvp`
 - `otro_x` desde `oxtvp`
+
+El CSV oficial de gobiernos locales carga indicadores municipales:
+
+- `poblacion_total` desde `Pob`
+- `poblacion_viviendas_particulares` desde `Pob_viv_part`
+- `poblacion_viviendas_colectivas` desde `Pob_viv_col`
+- `poblacion_situacion_calle` desde `Pob_sit_calle`
+- `viviendas_total` desde `Viv`
+- `viviendas_particulares` desde `Viv_par`
+- `viviendas_colectivas` desde `Viv_col`
 
 Y calcula indicadores derivados por nivel territorial:
 

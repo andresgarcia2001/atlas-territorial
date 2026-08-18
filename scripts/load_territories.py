@@ -1,4 +1,5 @@
 import argparse
+import csv
 import json
 import os
 import re
@@ -12,6 +13,18 @@ import psycopg
 
 YEAR = 2022
 DERIVED_SOURCE = "derived"
+LOCAL_GOVERNMENT_POPULATION_CSV_ENV = "LOCAL_GOVERNMENT_POPULATION_CSV"
+LOCAL_GOVERNMENT_POPULATION_DEFAULT_PATH = "/data/c2022_tp_gobierno_local_c1.csv"
+LOCAL_GOVERNMENT_POPULATION_SOURCE = "INDEC Censo 2022 gobiernos locales"
+LOCAL_GOVERNMENT_INDICATORS = {
+    "viviendas_total": "Viv",
+    "poblacion_total": "Pob",
+    "viviendas_particulares": "Viv_par",
+    "poblacion_viviendas_particulares": "Pob_viv_part",
+    "viviendas_colectivas": "Viv_col",
+    "poblacion_viviendas_colectivas": "Pob_viv_col",
+    "poblacion_situacion_calle": "Pob_sit_calle",
+}
 PROVINCE_CODE_BY_NAME = {
     "ciudad autonoma de buenos aires": "02",
     "caba": "02",
@@ -225,6 +238,36 @@ def normalize_label(value):
 
 def build_territory_id(prefix, external_id):
     return f"{prefix}_{normalize_identifier(external_id)}"
+
+
+def normalize_local_government_code(value):
+    text = str(value).strip()
+
+    if re.fullmatch(r"\d+(?:\.0+)?", text):
+        text = str(int(float(text)))
+
+    if not re.fullmatch(r"\d+", text):
+        raise SystemExit(f"Codigo de gobierno local invalido: {value!r}.")
+
+    return text.zfill(6)
+
+
+def parse_count_value(value, column_name, local_government_code):
+    text = str(value).strip()
+
+    if text in {"", "."}:
+        return None
+
+    normalized = text.replace(".", "").replace(",", ".")
+
+    try:
+        numeric_value = float(normalized)
+    except ValueError as caught_error:
+        raise SystemExit(
+            f"Valor invalido para {column_name} en gobierno local {local_government_code}: {value!r}."
+        ) from caught_error
+
+    return int(numeric_value) if numeric_value.is_integer() else numeric_value
 
 
 def resolve_external_id(config, properties, id_property, name):
@@ -575,6 +618,98 @@ def derive_indicators(cur, level):
     )
 
 
+def configured_local_government_population_path():
+    return os.getenv(LOCAL_GOVERNMENT_POPULATION_CSV_ENV) or LOCAL_GOVERNMENT_POPULATION_DEFAULT_PATH
+
+
+def delete_local_government_indicators(cur):
+    cur.execute(
+        """
+        DELETE FROM indicators
+        WHERE source = %s
+          AND indicator_name = ANY(%s::text[]);
+        """,
+        (LOCAL_GOVERNMENT_POPULATION_SOURCE, sorted(LOCAL_GOVERNMENT_INDICATORS)),
+    )
+
+
+def load_local_government_indicators(cur, known_territory_ids):
+    csv_path = Path(configured_local_government_population_path())
+
+    if not csv_path.is_file():
+        print(f"Skipped local government indicators: {csv_path} not found")
+        return 0
+
+    with csv_path.open(encoding="utf-8-sig", newline="") as file:
+        reader = csv.DictReader(file, delimiter=";")
+        fieldnames = set(reader.fieldnames or [])
+        required_fields = {"CODGL", *LOCAL_GOVERNMENT_INDICATORS.values()}
+        missing_fields = sorted(required_fields - fieldnames)
+
+        if missing_fields:
+            raise SystemExit(
+                "El CSV de gobiernos locales no tiene las columnas requeridas: "
+                + ", ".join(missing_fields)
+            )
+
+        delete_local_government_indicators(cur)
+        loaded_territory_count = 0
+        skipped_missing_territory_count = 0
+
+        for row in reader:
+            raw_local_government_code = str(row["CODGL"]).strip()
+
+            if not raw_local_government_code:
+                continue
+
+            if not re.fullmatch(r"\d+(?:\.0+)?", raw_local_government_code):
+                has_indicator_values = any(
+                    str(row.get(column_name, "")).strip()
+                    for column_name in LOCAL_GOVERNMENT_INDICATORS.values()
+                )
+
+                if has_indicator_values:
+                    raise SystemExit(
+                        f"Codigo de gobierno local invalido: {raw_local_government_code!r}."
+                    )
+
+                continue
+
+            local_government_code = normalize_local_government_code(raw_local_government_code)
+            territory_id = build_territory_id("municipio", local_government_code)
+
+            if territory_id not in known_territory_ids:
+                skipped_missing_territory_count += 1
+                continue
+
+            loaded_indicator_count = 0
+
+            for indicator_name, column_name in LOCAL_GOVERNMENT_INDICATORS.items():
+                indicator_value = parse_count_value(row[column_name], column_name, local_government_code)
+
+                if indicator_value is None:
+                    continue
+
+                upsert_indicator(
+                    cur,
+                    territory_id,
+                    indicator_name,
+                    indicator_value,
+                    LOCAL_GOVERNMENT_POPULATION_SOURCE,
+                )
+                loaded_indicator_count += 1
+
+            if loaded_indicator_count:
+                loaded_territory_count += 1
+
+    derive_indicators(cur, "municipality")
+    print(f"Loaded local government indicators for {loaded_territory_count} municipalities")
+    if skipped_missing_territory_count:
+        print(f"Skipped {skipped_missing_territory_count} local governments without loaded municipality geometry")
+
+    return loaded_territory_count
+
+
 def refresh_map_data_materialized_view(cur):
     cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY territory_indicator_map_data_mv;")
     print("Refreshed territory_indicator_map_data_mv")
@@ -710,6 +845,7 @@ def main(skip_orphans=False):
             known_territory_ids = fetch_existing_territory_ids(cur)
             for config in DATASETS:
                 total_loaded += load_dataset(cur, config, known_territory_ids, skip_orphans=skip_orphans)
+            load_local_government_indicators(cur, known_territory_ids)
 
     with get_connection() as conn:
         conn.autocommit = True

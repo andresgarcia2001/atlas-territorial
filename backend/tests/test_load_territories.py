@@ -243,6 +243,56 @@ def test_load_dataset_loads_electoral_circuit_parent_from_prepared_province_code
     ]
 
 
+def test_load_local_government_indicators_normalizes_codes_and_counts(monkeypatch, tmp_path):
+    csv_path = tmp_path / "gobiernos_locales.csv"
+    csv_path.write_text(
+        "\n".join(
+            [
+                "CODGL;Viv;Pob;Viv_par;Pob_viv_part;Viv_col;Pob_viv_col;Pob_sit_calle",
+                "60007;8.861;17.552;8.840;17.344;21;208;.",
+                ";;;;;;;",
+                "Fuente: INDEC, Censo Nacional de Población, Hogares y Viviendas 2022. Resultados definitivos.;;;;;;;",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    class FakeCursor:
+        def __init__(self):
+            self.params = []
+
+        def execute(self, _query, params=None):
+            self.params.append(params)
+
+    upserted_indicators = []
+    derived_levels = []
+
+    def fake_upsert_indicator(cur, territory_id, indicator_name, indicator_value, source):
+        upserted_indicators.append((territory_id, indicator_name, indicator_value, source))
+
+    monkeypatch.setenv("LOCAL_GOVERNMENT_POPULATION_CSV", str(csv_path))
+    monkeypatch.setattr(load_territories, "upsert_indicator", fake_upsert_indicator)
+    monkeypatch.setattr(load_territories, "derive_indicators", lambda _cur, level: derived_levels.append(level))
+
+    loaded_count = load_territories.load_local_government_indicators(FakeCursor(), {"municipio_060007"})
+
+    assert loaded_count == 1
+    assert (
+        "municipio_060007",
+        "poblacion_total",
+        17552,
+        load_territories.LOCAL_GOVERNMENT_POPULATION_SOURCE,
+    ) in upserted_indicators
+    assert (
+        "municipio_060007",
+        "poblacion_viviendas_particulares",
+        17344,
+        load_territories.LOCAL_GOVERNMENT_POPULATION_SOURCE,
+    ) in upserted_indicators
+    assert not any(indicator[1] == "poblacion_situacion_calle" for indicator in upserted_indicators)
+    assert derived_levels == ["municipality"]
+
+
 def test_load_dataset_rejects_invalid_municipality_in1(monkeypatch, tmp_path):
     geojson_path = write_geojson(tmp_path, [polygon_feature({"in1": "", "nam": "Sin Codigo"})])
     config = load_territories.DatasetConfig(

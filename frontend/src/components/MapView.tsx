@@ -12,6 +12,14 @@ import {
   type TransportVisualMode,
 } from "../mapModes";
 import {
+  getHeightRatio,
+  getHeightScale,
+  getTerritoryHash,
+  getValueStats,
+  interpolateHeight,
+  type ValueStats,
+} from "../mapHeight";
+import {
   compareTransportRouteLines,
   createTransportLineColorMap,
   getFallbackTransportRouteColor,
@@ -40,12 +48,6 @@ type MapViewProps = LayerSettings & {
 };
 
 type StyleExpression = unknown[];
-
-type ValueStats = {
-  hasValues: boolean;
-  min: number;
-  max: number;
-};
 
 type LoadedTerritoryData = {
   data: TerritoryData;
@@ -237,93 +239,10 @@ function getValueRange(data: MapData) {
   return { min, max };
 }
 
-function getTerritoryHash(territoryId: string) {
-  let hash = 0;
-
-  for (let index = 0; index < territoryId.length; index += 1) {
-    hash = (hash * 31 + territoryId.charCodeAt(index)) >>> 0;
-  }
-
-  return hash;
-}
-
 function getTerritoryColor(territoryId: string) {
   const hash = getTerritoryHash(territoryId);
 
   return TERRITORY_COLORS[hash % TERRITORY_COLORS.length];
-}
-
-function getValueStats(values: Array<number | null>): ValueStats {
-  let hasValues = false;
-  let min = Number.POSITIVE_INFINITY;
-  let max = Number.NEGATIVE_INFINITY;
-
-  for (const value of values) {
-    if (value === null) {
-      continue;
-    }
-
-    hasValues = true;
-    min = Math.min(min, value);
-    max = Math.max(max, value);
-  }
-
-  return hasValues ? { hasValues, min, max } : { hasValues: false, min: 0, max: 1 };
-}
-
-function getHeightScale(territoryLevel: TerritoryLevelId, indicator: string) {
-  if (indicator.startsWith("porcentaje_")) {
-    return {
-      barMax: 56000,
-      barMin: 7000,
-      surfaceMax: 1450,
-      surfaceMin: 180,
-    };
-  }
-
-  if (territoryLevel === "province" && indicator === "poblacion_total") {
-    return {
-      barMax: 220000,
-      barMin: 18000,
-      surfaceMax: 56000,
-      surfaceMin: 6500,
-    };
-  }
-
-  return {
-    barMax: 160000,
-    barMin: 12000,
-    surfaceMax: 7600,
-    surfaceMin: 260,
-  };
-}
-
-function interpolateHeight(min: number, max: number, ratio: number) {
-  return Math.round(min + (max - min) * ratio);
-}
-
-function getFallbackHeightRatio(territoryId: string) {
-  return 0.32 + ((getTerritoryHash(territoryId) % 1000) / 1000) * 0.5;
-}
-
-function getHeightRatio(territoryId: string, value: number | null, stats: ValueStats, heightMode: HeightMode) {
-  if (heightMode === "uniform") {
-    return 0.5;
-  }
-
-  if (heightMode === "visual") {
-    return getFallbackHeightRatio(territoryId);
-  }
-
-  if (!stats.hasValues || value === null) {
-    return 0.08;
-  }
-
-  if (stats.min === stats.max) {
-    return 0.62;
-  }
-
-  return 0.18 + ((value - stats.min) / (stats.max - stats.min)) * 0.82;
 }
 
 function getValueByTerritoryId(values: IndicatorValue[]) {
@@ -346,7 +265,14 @@ function composeMapData(
     ...territoryData,
     features: territoryData.features.map((feature, index) => {
       const value = values[index];
-      const heightRatio = getHeightRatio(feature.properties.id, value, valueStats, heightMode);
+      const heightRatio = getHeightRatio(
+        feature.properties.id,
+        value,
+        valueStats,
+        heightMode,
+        territoryLevel,
+        indicator,
+      );
 
       return {
         ...feature,
@@ -737,8 +663,8 @@ function addTerritoryLayers(
     },
     paint: {
       "line-color": "#111816",
-      "line-opacity": 0.28,
-      "line-width": 1,
+      "line-opacity": 0.2,
+      "line-width": 0.75,
     },
   });
 
@@ -748,8 +674,8 @@ function addTerritoryLayers(
     source: TERRITORY_SOURCE_ID,
     paint: {
       "line-color": "#f9fafb",
-      "line-opacity": 0.88,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.8, 10, 1.4, 14, 2.2],
+      "line-opacity": 0.82,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.65, 10, 1.1, 14, 1.7],
     },
   });
 
