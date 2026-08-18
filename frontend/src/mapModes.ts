@@ -18,13 +18,13 @@ export type LayerVisibility = {
 };
 
 const CAMERA_DURATION_MS = 350;
-const EXTRUDED_CAMERA_DURATION_MS = 650;
+const EXTRUDED_CAMERA_DURATION_MS = 720;
 
 export function getCameraPreset(viewMode: ViewMode): CameraPreset {
   if (viewMode === "extruded") {
     return {
-      pitch: 58,
-      bearing: -28,
+      pitch: 60,
+      bearing: -32,
       duration: EXTRUDED_CAMERA_DURATION_MS,
     };
   }

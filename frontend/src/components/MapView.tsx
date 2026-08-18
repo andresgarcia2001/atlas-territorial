@@ -13,6 +13,7 @@ import {
 } from "../mapModes";
 import {
   getHeightRatio,
+  getIndicatorRatio,
   getHeightScale,
   getTerritoryHash,
   getValueStats,
@@ -136,6 +137,13 @@ const TERRITORY_COLORS = [
   "#38bdf8",
   "#fb923c",
 ];
+
+const INDICATOR_COLORS = {
+  low: "#22d3ee",
+  midLow: "#34d399",
+  midHigh: "#f59e0b",
+  high: "#f43f5e",
+};
 
 const TRANSPORT_NIGHT_MASK_DATA = {
   type: "FeatureCollection",
@@ -280,6 +288,7 @@ function composeMapData(
           ...feature.properties,
           bar_height: interpolateHeight(heightScale.barMin, heightScale.barMax, heightRatio),
           indicator,
+          indicator_ratio: getIndicatorRatio(value, valueStats, territoryLevel, indicator),
           surface_height: interpolateHeight(heightScale.surfaceMin, heightScale.surfaceMax, heightRatio),
           value,
           year,
@@ -364,11 +373,15 @@ function getColorExpression(colorMode: ColorMode, min: number, max: number): Sty
   return [
     "interpolate",
     ["linear"],
-    ["coalesce", ["get", "value"], min],
-    min,
-    "#38bdf8",
-    max,
-    "#ef4444",
+    ["coalesce", ["get", "indicator_ratio"], 0],
+    0,
+    INDICATOR_COLORS.low,
+    0.36,
+    INDICATOR_COLORS.midLow,
+    0.68,
+    INDICATOR_COLORS.midHigh,
+    1,
+    INDICATOR_COLORS.high,
   ];
 }
 
@@ -441,7 +454,7 @@ function runWhenStyleIsReady(map: maplibregl.Map, callback: () => void) {
   map.once("load", callback);
 }
 
-function fitMapToData(map: maplibregl.Map, data: MapData) {
+function fitMapToData(map: maplibregl.Map, data: MapData, viewMode: ViewMode) {
   if (data.features.length === 0) {
     return;
   }
@@ -459,7 +472,20 @@ function fitMapToData(map: maplibregl.Map, data: MapData) {
   }
 
   if (!bounds.isEmpty()) {
-    map.fitBounds(bounds, { padding: 48, duration: 350 });
+    const cameraPreset = getCameraPreset(viewMode);
+
+    map.fitBounds(bounds, {
+      ...cameraPreset,
+      padding:
+        viewMode === "extruded"
+          ? {
+              top: 86,
+              right: 78,
+              bottom: 118,
+              left: 78,
+            }
+          : 48,
+    });
   }
 }
 
@@ -567,6 +593,7 @@ function applyViewMode(
     ]) {
       map.setLayoutProperty(layerId, "visibility", "none");
     }
+    map.easeTo(getCameraPreset(viewMode));
     return;
   }
 
@@ -620,7 +647,7 @@ function addTerritoryLayers(
       "fill-extrusion-color": getColorExpression(colorMode, min, max) as never,
       "fill-extrusion-height": getSurfaceHeightExpression() as never,
       "fill-extrusion-base": 0,
-      "fill-extrusion-opacity": 0.72,
+      "fill-extrusion-opacity": 0.78,
       "fill-extrusion-vertical-gradient": true,
     },
   });
@@ -634,7 +661,7 @@ function addTerritoryLayers(
     },
     paint: {
       "fill-color": getColorExpression(colorMode, min, max) as never,
-      "fill-opacity": 0.86,
+      "fill-opacity": 0.76,
     },
   });
 
@@ -649,7 +676,7 @@ function addTerritoryLayers(
       "fill-extrusion-color": getColorExpression(colorMode, min, max) as never,
       "fill-extrusion-height": getBarHeightExpression() as never,
       "fill-extrusion-base": 0,
-      "fill-extrusion-opacity": 0.94,
+      "fill-extrusion-opacity": 0.96,
       "fill-extrusion-vertical-gradient": true,
     },
   });
@@ -662,9 +689,9 @@ function addTerritoryLayers(
       visibility: "none",
     },
     paint: {
-      "line-color": "#111816",
-      "line-opacity": 0.2,
-      "line-width": 0.75,
+      "line-color": "#1f2937",
+      "line-opacity": 0.28,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.65, 10, 1.05, 14, 1.45],
     },
   });
 
@@ -674,8 +701,8 @@ function addTerritoryLayers(
     source: TERRITORY_SOURCE_ID,
     paint: {
       "line-color": "#f9fafb",
-      "line-opacity": 0.82,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.65, 10, 1.1, 14, 1.7],
+      "line-opacity": 0.88,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 4, 0.75, 10, 1.15, 14, 1.8],
     },
   });
 
@@ -975,7 +1002,7 @@ function renderTerritoryData(
   }
 
   if (shouldFitMap) {
-    fitMapToData(map, loadedData);
+    fitMapToData(map, loadedData, layerSettings.viewMode);
   }
 
   applyViewMode(
@@ -1108,8 +1135,8 @@ export function MapView({
           light: {
             anchor: "viewport",
             color: "#ffffff",
-            intensity: 0.58,
-            position: [1.2, 210, 35],
+            intensity: 0.72,
+            position: [1.15, 205, 42],
           },
           sources: {
             osm: {
@@ -1124,6 +1151,12 @@ export function MapView({
               id: "osm",
               type: "raster",
               source: "osm",
+              paint: {
+                "raster-brightness-max": 0.96,
+                "raster-contrast": 0.06,
+                "raster-opacity": 0.86,
+                "raster-saturation": -0.14,
+              },
             },
           ],
         },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getHeightRatio, getValueStats } from "./mapHeight";
+import { getHeightRatio, getIndicatorRatio, getValueStats } from "./mapHeight";
 
 describe("mapHeight", () => {
   it("keeps percentage indicators linear", () => {
@@ -17,6 +17,16 @@ describe("mapHeight", () => {
     const high = getHeightRatio("santa_cruz", 400, stats, "indicator", "province", "poblacion_total");
 
     expect(high - low).toBeGreaterThan(0.164);
+    expect(high).toBeGreaterThan(low);
+  });
+
+  it("uses the same eased province population ratio for indicator color", () => {
+    const stats = getValueStats([0, 200, 400, 1000]);
+    const low = getIndicatorRatio(200, stats, "province", "poblacion_total");
+    const high = getIndicatorRatio(400, stats, "province", "poblacion_total");
+
+    expect(low).toBeGreaterThan(0.2);
+    expect(high).toBeGreaterThan(0.4);
     expect(high).toBeGreaterThan(low);
   });
 });

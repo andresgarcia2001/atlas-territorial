@@ -86,6 +86,7 @@ export type MapProperties = TerritoryProperties & {
   value: number | null;
   year: number;
   bar_height?: number;
+  indicator_ratio?: number;
   surface_height?: number;
   territory_color?: string;
 };

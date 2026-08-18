@@ -13,10 +13,10 @@ export const FALLBACK_TERRITORY_LEVELS: TerritoryLevel[] = [
 export const DEFAULT_LAYER_SETTINGS: LayerSettings = {
   indicator: DEFAULT_INDICATOR,
   colorMode: "indicator",
-  viewMode: "flat",
-  geometryMode: "surface",
+  viewMode: "extruded",
+  geometryMode: "bars",
   heightMode: "indicator",
-  territoryLayerMode: "hidden",
+  territoryLayerMode: "visible",
   transportOverlay: "none",
   transportRouteLines: [],
   territoryLevel: DEFAULT_TERRITORY_LEVEL,

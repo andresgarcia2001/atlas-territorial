@@ -11,7 +11,7 @@ import {
 describe("mapModes", () => {
   it("keeps camera concerns separate from geometry style", () => {
     expect(getCameraPreset("flat")).toMatchObject({ pitch: 0, bearing: 0 });
-    expect(getCameraPreset("extruded")).toMatchObject({ pitch: 58, bearing: -28 });
+    expect(getCameraPreset("extruded")).toMatchObject({ pitch: 60, bearing: -32 });
   });
 
   it("uses a neon transport style only in 3D view", () => {

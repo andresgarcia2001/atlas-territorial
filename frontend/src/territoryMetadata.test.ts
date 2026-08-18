@@ -22,6 +22,19 @@ import type { TerritoryLevel } from "./types";
 
 
 describe("territoryMetadata", () => {
+  it("starts on the province population 3D scene", () => {
+    expect(DEFAULT_LAYER_SETTINGS).toMatchObject({
+      indicator: "poblacion_total",
+      territoryLevel: "province",
+      colorMode: "indicator",
+      viewMode: "extruded",
+      geometryMode: "bars",
+      heightMode: "indicator",
+      territoryLayerMode: "visible",
+      transportOverlay: "none",
+    });
+  });
+
   it("falls back to default territory levels when metadata loading fails", async () => {
     const loadTerritoryLevels = vi.fn<() => Promise<TerritoryLevel[]>>().mockRejectedValue(new Error("boom"));
 
@@ -62,7 +75,7 @@ describe("territoryMetadata", () => {
     expect(
       areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
         ...DEFAULT_LAYER_SETTINGS,
-        geometryMode: "bars",
+        geometryMode: "surface",
       }),
     ).toBe(false);
     expect(
@@ -74,7 +87,7 @@ describe("territoryMetadata", () => {
     expect(
       areLayerSettingsEqual(DEFAULT_LAYER_SETTINGS, {
         ...DEFAULT_LAYER_SETTINGS,
-        territoryLayerMode: "visible",
+        territoryLayerMode: "hidden",
       }),
     ).toBe(false);
     expect(

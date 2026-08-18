@@ -65,10 +65,10 @@ export function getHeightScale(territoryLevel: TerritoryLevelId, indicator: stri
 
   if (territoryLevel === "province" && indicator === "poblacion_total") {
     return {
-      barMax: 220000,
-      barMin: 18000,
-      surfaceMax: 56000,
-      surfaceMin: 6500,
+      barMax: 190000,
+      barMin: 16000,
+      surfaceMax: 46000,
+      surfaceMin: 5600,
     };
   }
 
@@ -138,4 +138,25 @@ export function getHeightRatio(
       : HEIGHT_RATIO_SPAN;
 
   return ratioBase + easedRatio * ratioSpan;
+}
+
+export function getIndicatorRatio(
+  value: number | null,
+  stats: ValueStats,
+  territoryLevel: TerritoryLevelId,
+  indicator: string,
+) {
+  if (!stats.hasValues || value === null) {
+    return 0;
+  }
+
+  if (stats.min === stats.max) {
+    return HEIGHT_RATIO_SINGLE_VALUE;
+  }
+
+  const rawRatio = (value - stats.min) / (stats.max - stats.min);
+  const clampedRatio = Math.max(0, Math.min(1, rawRatio));
+  const heightExponent = getHeightExponent(territoryLevel, indicator);
+
+  return heightExponent === 1 ? clampedRatio : Math.pow(clampedRatio, heightExponent);
 }

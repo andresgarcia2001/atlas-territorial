@@ -347,9 +347,9 @@ originales en `metadata`, normaliza campos comunes como `linea`, `recorrido`,
 `sentido`, `desde` y `hasta`, y borra recorridos obsoletos de la misma fuente que
 ya no aparezcan en el archivo cargado.
 
-La UI abre por defecto en modo transporte: `Colectivos BA` activo y mapa
-territorial oculto. Si la tabla `transport_routes` esta vacia, se vera solo el
-mapa base hasta cargar el GeoJSON.
+La UI abre por defecto con `Poblacion total` por provincias en vista 3D. Los
+recorridos de colectivos se pueden activar desde `Capas adicionales` y filtrar
+por linea cuando la tabla `transport_routes` tenga datos cargados.
 
 ## Materialized View de mapa
 
