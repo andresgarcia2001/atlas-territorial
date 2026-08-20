@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getHeightRatio, getIndicatorRatio, getValueStats } from "./mapHeight";
+import { getHeightRatio, getHeightScale, getIndicatorRatio, getValueStats } from "./mapHeight";
 
 describe("mapHeight", () => {
   it("keeps percentage indicators linear", () => {
@@ -28,5 +28,14 @@ describe("mapHeight", () => {
     expect(low).toBeGreaterThan(0.2);
     expect(high).toBeGreaterThan(0.4);
     expect(high).toBeGreaterThan(low);
+  });
+
+  it("keeps municipal surface relief low enough to avoid slab-like map faces", () => {
+    expect(getHeightScale("municipality", "densidad_poblacional")).toMatchObject({
+      barMax: 118000,
+      barMin: 9000,
+      surfaceMax: 3200,
+      surfaceMin: 160,
+    });
   });
 });

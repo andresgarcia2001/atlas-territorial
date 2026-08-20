@@ -23,8 +23,8 @@ const EXTRUDED_CAMERA_DURATION_MS = 720;
 export function getCameraPreset(viewMode: ViewMode): CameraPreset {
   if (viewMode === "extruded") {
     return {
-      pitch: 60,
-      bearing: -32,
+      pitch: 52,
+      bearing: -26,
       duration: EXTRUDED_CAMERA_DURATION_MS,
     };
   }
@@ -43,8 +43,8 @@ export function getTransportVisualMode(viewMode: ViewMode): TransportVisualMode 
 export function getTransportCameraPreset(viewMode: ViewMode): CameraPreset {
   if (viewMode === "extruded") {
     return {
-      pitch: 60,
-      bearing: -30,
+      pitch: 54,
+      bearing: -26,
       duration: EXTRUDED_CAMERA_DURATION_MS,
     };
   }

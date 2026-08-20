@@ -11,14 +11,14 @@ import {
 describe("mapModes", () => {
   it("keeps camera concerns separate from geometry style", () => {
     expect(getCameraPreset("flat")).toMatchObject({ pitch: 0, bearing: 0 });
-    expect(getCameraPreset("extruded")).toMatchObject({ pitch: 60, bearing: -32 });
+    expect(getCameraPreset("extruded")).toMatchObject({ pitch: 52, bearing: -26 });
   });
 
   it("uses a neon transport style only in 3D view", () => {
     expect(getTransportVisualMode("flat")).toBe("standard");
     expect(getTransportVisualMode("extruded")).toBe("neon");
     expect(getTransportCameraPreset("flat")).toMatchObject({ pitch: 0, bearing: 0 });
-    expect(getTransportCameraPreset("extruded")).toMatchObject({ pitch: 60, bearing: -30 });
+    expect(getTransportCameraPreset("extruded")).toMatchObject({ pitch: 54, bearing: -26 });
   });
 
   it("falls back to surface extrusion when bar geometry is not available", () => {

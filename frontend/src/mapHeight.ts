@@ -58,8 +58,8 @@ export function getHeightScale(territoryLevel: TerritoryLevelId, indicator: stri
     return {
       barMax: 56000,
       barMin: 7000,
-      surfaceMax: 1450,
-      surfaceMin: 180,
+      surfaceMax: 950,
+      surfaceMin: 140,
     };
   }
 
@@ -67,16 +67,34 @@ export function getHeightScale(territoryLevel: TerritoryLevelId, indicator: stri
     return {
       barMax: 190000,
       barMin: 16000,
-      surfaceMax: 46000,
-      surfaceMin: 5600,
+      surfaceMax: 28000,
+      surfaceMin: 3600,
+    };
+  }
+
+  if (territoryLevel === "municipality") {
+    return {
+      barMax: 118000,
+      barMin: 9000,
+      surfaceMax: 3200,
+      surfaceMin: 160,
+    };
+  }
+
+  if (territoryLevel === "census_radius" || territoryLevel === "electoral_circuit") {
+    return {
+      barMax: 46000,
+      barMin: 4000,
+      surfaceMax: 900,
+      surfaceMin: 80,
     };
   }
 
   return {
     barMax: 160000,
     barMin: 12000,
-    surfaceMax: 7600,
-    surfaceMin: 260,
+    surfaceMax: 3600,
+    surfaceMin: 180,
   };
 }
 

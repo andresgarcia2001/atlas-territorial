@@ -108,6 +108,9 @@ const TRANSPORT_ROUTE_LAYER_IDS = [
   "transport-routes-casing",
   "transport-routes-line",
 ];
+const SURFACE_EXTRUSION_OPACITY = 0.52;
+const BAR_FOOTPRINT_OPACITY = 0.22;
+const BAR_EXTRUSION_OPACITY = 0.84;
 const WEBGL_UNAVAILABLE_MESSAGE =
   "No se pudo iniciar el mapa porque WebGL no esta disponible en este navegador. Revisar la aceleracion por hardware de Firefox o probar con otro navegador.";
 
@@ -543,6 +546,7 @@ function updateTerritoryPaint(
   map.setPaintProperty("territories-fill", "fill-opacity", getFillOpacity(colorMode));
   if (map.getLayer("territories-extrusion")) {
     map.setPaintProperty("territories-extrusion", "fill-extrusion-color", getColorExpression(colorMode, min, max));
+    map.setPaintProperty("territories-extrusion", "fill-extrusion-opacity", SURFACE_EXTRUSION_OPACITY);
     map.setPaintProperty(
       "territories-extrusion",
       "fill-extrusion-height",
@@ -552,6 +556,7 @@ function updateTerritoryPaint(
 
   if (map.getLayer("territory-bars-extrusion")) {
     map.setPaintProperty("territory-bars-extrusion", "fill-extrusion-color", getColorExpression(colorMode, min, max));
+    map.setPaintProperty("territory-bars-extrusion", "fill-extrusion-opacity", BAR_EXTRUSION_OPACITY);
     map.setPaintProperty(
       "territory-bars-extrusion",
       "fill-extrusion-height",
@@ -561,6 +566,7 @@ function updateTerritoryPaint(
 
   if (map.getLayer("territory-bars-fill")) {
     map.setPaintProperty("territory-bars-fill", "fill-color", getColorExpression(colorMode, min, max));
+    map.setPaintProperty("territory-bars-fill", "fill-opacity", BAR_FOOTPRINT_OPACITY);
   }
 }
 
@@ -647,7 +653,7 @@ function addTerritoryLayers(
       "fill-extrusion-color": getColorExpression(colorMode, min, max) as never,
       "fill-extrusion-height": getSurfaceHeightExpression() as never,
       "fill-extrusion-base": 0,
-      "fill-extrusion-opacity": 0.78,
+      "fill-extrusion-opacity": SURFACE_EXTRUSION_OPACITY,
       "fill-extrusion-vertical-gradient": true,
     },
   });
@@ -661,7 +667,7 @@ function addTerritoryLayers(
     },
     paint: {
       "fill-color": getColorExpression(colorMode, min, max) as never,
-      "fill-opacity": 0.76,
+      "fill-opacity": BAR_FOOTPRINT_OPACITY,
     },
   });
 
@@ -676,7 +682,7 @@ function addTerritoryLayers(
       "fill-extrusion-color": getColorExpression(colorMode, min, max) as never,
       "fill-extrusion-height": getBarHeightExpression() as never,
       "fill-extrusion-base": 0,
-      "fill-extrusion-opacity": 0.96,
+      "fill-extrusion-opacity": BAR_EXTRUSION_OPACITY,
       "fill-extrusion-vertical-gradient": true,
     },
   });
