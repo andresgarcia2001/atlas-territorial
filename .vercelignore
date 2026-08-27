@@ -1,0 +1,11 @@
+.env
+.venv/
+.pytest_cache/
+.pytest_cache_local/
+.pytest_tmp/
+.tmp/
+.docker-cli/
+frontend/dist/
+frontend/node_modules/
+frontend/.edge-headless/
+data/

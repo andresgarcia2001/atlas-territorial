@@ -10,7 +10,8 @@ import type {
   TransportRouteLinesResponse,
 } from "./types";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+const DEFAULT_API_URL = import.meta.env.PROD ? "/api" : "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL ?? DEFAULT_API_URL;
 
 type RequestOptions = {
   signal?: AbortSignal;
