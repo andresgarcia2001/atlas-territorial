@@ -26,6 +26,31 @@ Para cada caso registrar:
 - Si el plan usa `Seq Scan` sobre tablas o vistas grandes.
 - Tamano aproximado del payload GeoJSON devuelto por la API.
 
+La ruta interactiva preferida es el tile vectorial, porque limita el trabajo al
+viewport y evita enviar el nivel completo al navegador:
+
+- `/tiles/territories/4/4/6.pbf?level=province&indicator=poblacion_total&year=2022`
+- `/tiles/territories/8/71/99.pbf?level=municipality&indicator=poblacion_total&year=2022`
+- `/tiles/territories/12/1200/1800.pbf?level=census_radius&indicator=poblacion_total&year=2022`
+
+Las tolerancias de simplificacion se aplican en metros sobre la geometria
+transformada: zoom 0--5 `10000`, 6--8 `1000`, 9--11 `200`, 12--14 `50` y
+15--22 `5`. La geometria canonica no se modifica.
+
+Para una medicion reproducible, ejecutar contra un backend y una base cargada:
+
+```powershell
+python scripts/measure_map_performance.py --url "http://localhost:8000/tiles/territories/8/71/99.pbf?level=municipality&indicator=poblacion_total&year=2022" --requests 100 --concurrency 100
+```
+
+Guardar fuera del repositorio el JSON resultante y registrar fecha, volumen de
+territorios/indicadores, estado de cache (frio o caliente), disponibilidad de
+PostGIS, concurrencia, p50/p95/p99, conteo de estados HTTP, errores de transporte
+y tamanos min/max/promedio. No guardar cuerpos de respuesta.
+
+Los objetivos iniciales son p95 menor a 500 ms para tiles cacheables, p95 menor a
+1 s sin cache y cero agotamientos del pool en 100 requests concurrentes.
+
 ## Trigger para evaluar partitioning
 
 No implementar partitioning hasta que haya evidencia medible. Reabrir la decision

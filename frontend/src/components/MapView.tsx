@@ -2,7 +2,7 @@
 import maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { fetchIndicatorValues, fetchTerritories, fetchTransportRoutes } from "../api";
+import { API_URL, buildTerritoryTileUrl, fetchIndicatorValues, fetchTerritories, fetchTransportRoutes } from "../api";
 import { getIndicatorLabel } from "../indicatorCatalog";
 import {
   getCameraPreset,
@@ -18,6 +18,8 @@ import {
   getTerritoryHash,
   getValueStats,
   interpolateHeight,
+  getStableHeightRatio,
+  getStableIndicatorRatio,
   type ValueStats,
 } from "../mapHeight";
 import {
@@ -31,6 +33,7 @@ import type {
   GeometryMode,
   HeightMode,
   IndicatorValue,
+  IndicatorScale,
   LayerSettings,
   MapData,
   MapFeature,
@@ -59,6 +62,7 @@ type LoadedTerritoryData = {
 
 type LoadedIndicatorValues = {
   valueByTerritoryId: Map<string, number | null>;
+  scale: IndicatorScale | null;
   indicator: string;
   territoryParentKey: string;
   territoryKey: string;
@@ -113,6 +117,7 @@ const BAR_FOOTPRINT_OPACITY = 0.22;
 const BAR_EXTRUSION_OPACITY = 0.84;
 const WEBGL_UNAVAILABLE_MESSAGE =
   "No se pudo iniciar el mapa porque WebGL no esta disponible en este navegador. Revisar la aceleracion por hardware de Firefox o probar con otro navegador.";
+const VECTOR_TILES_ENABLED = import.meta.env.VITE_ENABLE_VECTOR_TILES !== "false";
 
 const TERRITORY_COLORS = [
   "#22c55e",
@@ -267,6 +272,7 @@ function composeMapData(
   territoryLevel: TerritoryLevelId,
   heightMode: HeightMode,
   year: number,
+  scale: IndicatorScale | null,
 ): MapData {
   const values = territoryData.features.map((feature) => valueByTerritoryId.get(feature.properties.id) ?? null);
   const valueStats = getValueStats(values);
@@ -276,14 +282,17 @@ function composeMapData(
     ...territoryData,
     features: territoryData.features.map((feature, index) => {
       const value = values[index];
-      const heightRatio = getHeightRatio(
-        feature.properties.id,
-        value,
-        valueStats,
-        heightMode,
-        territoryLevel,
-        indicator,
-      );
+      const heightRatio =
+        heightMode === "indicator" && scale
+          ? getStableHeightRatio(value, scale, territoryLevel, indicator)
+          : getHeightRatio(
+              feature.properties.id,
+              value,
+              valueStats,
+              heightMode,
+              territoryLevel,
+              indicator,
+            );
 
       return {
         ...feature,
@@ -291,7 +300,10 @@ function composeMapData(
           ...feature.properties,
           bar_height: interpolateHeight(heightScale.barMin, heightScale.barMax, heightRatio),
           indicator,
-          indicator_ratio: getIndicatorRatio(value, valueStats, territoryLevel, indicator),
+          indicator_ratio:
+            heightMode === "indicator" && scale
+              ? getStableIndicatorRatio(value, scale)
+              : getIndicatorRatio(value, valueStats, territoryLevel, indicator),
           surface_height: interpolateHeight(heightScale.surfaceMin, heightScale.surfaceMax, heightRatio),
           value,
           year,
@@ -400,7 +412,7 @@ function getFillOpacity(colorMode: ColorMode) {
   return colorMode === "territory" ? 0.58 : 0.5;
 }
 
-function getLegend(data: MapData, layerSettings: LayerSettings): LegendState | null {
+function getLegend(data: MapData, layerSettings: LayerSettings, scale: IndicatorScale | null): LegendState | null {
   if (layerSettings.territoryLayerMode === "hidden") {
     return null;
   }
@@ -412,7 +424,9 @@ function getLegend(data: MapData, layerSettings: LayerSettings): LegendState | n
     };
   }
 
-  const { min, max } = getValueRange(data);
+  const { min, max } = scale
+    ? { min: scale.domain_min, max: scale.domain_max }
+    : getValueRange(data);
 
   return {
     colorMode: "indicator",
@@ -570,6 +584,19 @@ function updateTerritoryPaint(
   }
 }
 
+function getTerritoryTileUrl(layerSettings: LayerSettings, year: number) {
+  return buildTerritoryTileUrl(API_URL, {
+    z: "{z}",
+    x: "{x}",
+    y: "{y}",
+    level: layerSettings.territoryLevel,
+    indicator: layerSettings.indicator,
+    year,
+    parentId: layerSettings.territoryParentId,
+    territoryIds: layerSettings.territoryIds,
+  });
+}
+
 function applyViewMode(
   map: maplibregl.Map,
   viewMode: ViewMode,
@@ -618,24 +645,33 @@ function addTerritoryLayers(
   map: maplibregl.Map,
   data: MapData,
   colorMode: ColorMode,
+  tileUrl?: string,
 ) {
   const { min, max } = getValueRange(data);
   const barData = composeBarMapData(data);
+  const useVectorTiles = Boolean(tileUrl);
+  const territorySource = useVectorTiles
+    ? { type: "vector" as const, tiles: [tileUrl as string], minzoom: 0, maxzoom: 22 }
+    : { type: "geojson" as const, data };
+  const barSourceId = useVectorTiles ? TERRITORY_SOURCE_ID : TERRITORY_BARS_SOURCE_ID;
+  const sourceLayer = useVectorTiles ? { "source-layer": "territories" } : {};
 
   map.addSource(TERRITORY_SOURCE_ID, {
-    type: "geojson",
-    data,
+    ...territorySource,
   });
 
-  map.addSource(TERRITORY_BARS_SOURCE_ID, {
-    type: "geojson",
-    data: barData,
-  });
+  if (!useVectorTiles) {
+    map.addSource(TERRITORY_BARS_SOURCE_ID, {
+      type: "geojson",
+      data: barData,
+    });
+  }
 
   map.addLayer({
     id: "territories-fill",
     type: "fill",
     source: TERRITORY_SOURCE_ID,
+    ...sourceLayer,
     paint: {
       "fill-color": getColorExpression(colorMode, min, max) as never,
       "fill-opacity": getFillOpacity(colorMode),
@@ -646,6 +682,7 @@ function addTerritoryLayers(
     id: "territories-extrusion",
     type: "fill-extrusion",
     source: TERRITORY_SOURCE_ID,
+    ...sourceLayer,
     layout: {
       visibility: "none",
     },
@@ -661,7 +698,8 @@ function addTerritoryLayers(
   map.addLayer({
     id: "territory-bars-fill",
     type: "fill",
-    source: TERRITORY_BARS_SOURCE_ID,
+    source: barSourceId,
+    ...sourceLayer,
     layout: {
       visibility: "none",
     },
@@ -674,7 +712,8 @@ function addTerritoryLayers(
   map.addLayer({
     id: "territory-bars-extrusion",
     type: "fill-extrusion",
-    source: TERRITORY_BARS_SOURCE_ID,
+    source: barSourceId,
+    ...sourceLayer,
     layout: {
       visibility: "none",
     },
@@ -690,7 +729,8 @@ function addTerritoryLayers(
   map.addLayer({
     id: "territory-bars-outline",
     type: "line",
-    source: TERRITORY_BARS_SOURCE_ID,
+    source: barSourceId,
+    ...sourceLayer,
     layout: {
       visibility: "none",
     },
@@ -705,6 +745,7 @@ function addTerritoryLayers(
     id: "territories-outline",
     type: "line",
     source: TERRITORY_SOURCE_ID,
+    ...sourceLayer,
     paint: {
       "line-color": "#f9fafb",
       "line-opacity": 0.88,
@@ -993,18 +1034,28 @@ function renderTerritoryData(
   loadedData: MapData,
   layerSettings: LayerSettings,
   shouldFitMap: boolean,
+  year: number,
 ) {
-  const source = map.getSource(TERRITORY_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+  const source = map.getSource(TERRITORY_SOURCE_ID) as
+    | maplibregl.GeoJSONSource
+    | maplibregl.VectorTileSource
+    | undefined;
   const barSource = map.getSource(TERRITORY_BARS_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
   const { min, max } = getValueRange(loadedData);
   const barData = composeBarMapData(loadedData);
+  const tileUrl = VECTOR_TILES_ENABLED ? getTerritoryTileUrl(layerSettings, year) : undefined;
 
-  if (source) {
+  if (source?.type === "vector") {
+    if (tileUrl) {
+      source.setTiles([tileUrl]);
+    }
+    updateTerritoryPaint(map, loadedData, layerSettings, min, max);
+  } else if (source) {
     source.setData(loadedData);
     barSource?.setData(barData);
     updateTerritoryPaint(map, loadedData, layerSettings, min, max);
   } else {
-    addTerritoryLayers(map, loadedData, layerSettings.colorMode);
+    addTerritoryLayers(map, loadedData, layerSettings.colorMode, tileUrl);
   }
 
   if (shouldFitMap) {
@@ -1113,14 +1164,15 @@ export function MapView({
       territoryLevel,
       layerSettings.heightMode,
       year,
+      indicatorValues.scale,
     );
 
     renderedDataRef.current = {
       ...indicatorValues,
       data,
     };
-    renderTerritoryData(map, data, layerSettings, shouldFitMap);
-    setLegend(getLegend(data, layerSettings));
+    renderTerritoryData(map, data, layerSettings, shouldFitMap, year);
+    setLegend(getLegend(data, layerSettings, indicatorValues.scale));
     onDataError?.(null);
 
     return true;
@@ -1269,6 +1321,7 @@ export function MapView({
 
         loadedIndicatorValuesRef.current = {
           valueByTerritoryId: getValueByTerritoryId(data.values),
+          scale: data.scale,
           indicator,
           territoryParentKey,
           territoryKey,
@@ -1457,14 +1510,15 @@ export function MapView({
       territoryLevel,
       heightMode,
       year,
+      indicatorValues.scale,
     );
 
     renderedDataRef.current = {
       ...indicatorValues,
       data,
     };
-    renderTerritoryData(map, data, layerSettings, false);
-    setLegend(getLegend(data, layerSettings));
+    renderTerritoryData(map, data, layerSettings, false, year);
+    setLegend(getLegend(data, layerSettings, indicatorValues.scale));
   }, [
     colorMode,
     geometryMode,

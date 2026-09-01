@@ -74,11 +74,37 @@ export type IndicatorValue = {
   value: number | null;
 };
 
+export type IndicatorScale = {
+  indicator: string;
+  level: TerritoryLevelId;
+  year: number;
+  value_min: number;
+  value_max: number;
+  value_p02: number;
+  value_p98: number;
+  domain_min: number;
+  domain_max: number;
+  transform: "linear" | "sqrt";
+  method: "fixed_percentage" | "global_min_max";
+};
+
 export type IndicatorValuesResponse = {
   indicator: string;
   year: number;
   level: TerritoryLevelId;
+  scale: IndicatorScale | null;
   values: IndicatorValue[];
+};
+
+export type TileRequest = {
+  z: number | string;
+  x: number | string;
+  y: number | string;
+  level: TerritoryLevelId;
+  indicator?: string;
+  year?: number;
+  parentId?: string | null;
+  territoryIds?: string[];
 };
 
 export type MapProperties = TerritoryProperties & {

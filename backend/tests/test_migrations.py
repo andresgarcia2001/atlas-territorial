@@ -94,6 +94,19 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
                 )
                 assert cur.fetchone()[0] == "territory_indicator_map_data_mv"
 
+                cur.execute("SELECT to_regclass('public.indicator_scale_stats_mv');")
+                assert cur.fetchone()[0] == "indicator_scale_stats_mv"
+
+                cur.execute(
+                    """
+                    SELECT indexname
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND tablename = 'indicator_scale_stats_mv';
+                    """
+                )
+                assert "indicator_scale_stats_mv_key_idx" in {row[0] for row in cur.fetchall()}
+
                 cur.execute(
                     """
                     SELECT attname
@@ -221,6 +234,7 @@ def test_alembic_upgrade_head_against_empty_postgis_database(monkeypatch):
 
                 conn.commit()
                 conn.autocommit = True
+                load_territories.refresh_indicator_scale_stats(cur)
                 load_territories.refresh_map_data_materialized_view(cur)
 
                 cur.execute(

@@ -1,4 +1,4 @@
-import type { HeightMode, TerritoryLevelId } from "./types";
+import type { HeightMode, IndicatorScale, TerritoryLevelId } from "./types";
 
 export type ValueStats = {
   hasValues: boolean;
@@ -177,4 +177,42 @@ export function getIndicatorRatio(
   const heightExponent = getHeightExponent(territoryLevel, indicator);
 
   return heightExponent === 1 ? clampedRatio : Math.pow(clampedRatio, heightExponent);
+}
+
+export function getStableIndicatorRatio(value: number | null, scale: IndicatorScale | null) {
+  if (value === null || scale === null) {
+    return 0;
+  }
+
+  if (scale.domain_min === scale.domain_max) {
+    return 0.5;
+  }
+
+  const rawRatio = (value - scale.domain_min) / (scale.domain_max - scale.domain_min);
+  const clampedRatio = Math.max(0, Math.min(1, rawRatio));
+
+  return scale.transform === "sqrt" ? Math.sqrt(clampedRatio) : clampedRatio;
+}
+
+export function getStableHeightRatio(
+  value: number | null,
+  scale: IndicatorScale | null,
+  territoryLevel: TerritoryLevelId,
+  indicator: string,
+) {
+  if (value === null || scale === null) {
+    return HEIGHT_RATIO_MISSING;
+  }
+
+  const ratio = getStableIndicatorRatio(value, scale);
+  const ratioBase =
+    territoryLevel === "province" && indicator === "poblacion_total"
+      ? PROVINCE_POPULATION_RATIO_BASE
+      : HEIGHT_RATIO_BASE;
+  const ratioSpan =
+    territoryLevel === "province" && indicator === "poblacion_total"
+      ? PROVINCE_POPULATION_RATIO_SPAN
+      : HEIGHT_RATIO_SPAN;
+
+  return ratioBase + ratio * ratioSpan;
 }

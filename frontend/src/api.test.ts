@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildTerritoryTileUrl,
   fetchIndicatorValues,
   fetchMapData,
   fetchTerritories,
@@ -55,6 +56,23 @@ describe("api", () => {
     expect(requestedUrl.searchParams.get("level")).toBe("municipality");
     expect(requestedUrl.searchParams.get("parent_id")).toBe("provincia_02");
     expect(requestedUrl.searchParams.getAll("territory_ids")).toEqual(["municipio_001", "municipio_002"]);
+  });
+
+  it("builds a viewport tile URL without serializing all territory ids", () => {
+    const url = buildTerritoryTileUrl("http://localhost:8000", {
+      z: 8,
+      x: 71,
+      y: 99,
+      level: "municipality",
+      indicator: "poblacion_total",
+      year: 2022,
+      parentId: "provincia_02",
+    });
+
+    expect(url).toContain("/tiles/territories/8/71/99.pbf");
+    expect(url).toContain("level=municipality");
+    expect(url).toContain("indicator=poblacion_total");
+    expect(url).not.toContain("territory_ids=");
   });
 
   it("builds territory option requests for a child level", async () => {

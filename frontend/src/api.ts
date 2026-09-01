@@ -1,9 +1,11 @@
 import type {
   IndicatorValuesResponse,
   IndicatorResponse,
+  IndicatorScale,
   MapData,
   TerritoryData,
   TerritoryLevelId,
+  TileRequest,
   TerritoryLevelsResponse,
   TerritoryOptionsResponse,
   TransportRouteData,
@@ -11,7 +13,26 @@ import type {
 } from "./types";
 
 const DEFAULT_API_URL = import.meta.env.PROD ? "/api" : "http://localhost:8000";
-const API_URL = import.meta.env.VITE_API_URL ?? DEFAULT_API_URL;
+export const API_URL = import.meta.env.VITE_API_URL ?? DEFAULT_API_URL;
+
+export function buildTerritoryTileUrl(apiUrl: string, request: TileRequest) {
+  const searchParams = new URLSearchParams({ level: request.level });
+
+  if (request.indicator) {
+    searchParams.set("indicator", request.indicator);
+  }
+  if (request.year !== undefined) {
+    searchParams.set("year", String(request.year));
+  }
+  if (request.parentId) {
+    searchParams.set("parent_id", request.parentId);
+  }
+  for (const territoryId of request.territoryIds ?? []) {
+    searchParams.append("territory_ids", territoryId);
+  }
+
+  return `${apiUrl}/tiles/territories/${request.z}/${request.x}/${request.y}.pbf?${searchParams.toString()}`;
+}
 
 type RequestOptions = {
   signal?: AbortSignal;
@@ -120,6 +141,18 @@ export async function fetchIndicatorValues(
   }
 
   return (await response.json()) as IndicatorValuesResponse;
+}
+
+export async function fetchIndicatorScale(indicator: string, year: number, level: TerritoryLevelId) {
+  const searchParams = new URLSearchParams({ indicator, year: year.toString(), level });
+  const response = await fetch(`${API_URL}/indicator-scales?${searchParams.toString()}`);
+
+  if (!response.ok) {
+    throw new Error("No se pudo cargar la escala del indicador.");
+  }
+
+  const data = (await response.json()) as { scale: IndicatorScale };
+  return data.scale;
 }
 
 export async function fetchMapData(

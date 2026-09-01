@@ -5,6 +5,17 @@ from fastapi.testclient import TestClient
 client = TestClient(api_main.app)
 
 
+def test_app_lifespan_initializes_and_closes_database_pool(monkeypatch):
+    events = []
+    monkeypatch.setattr(api_main, "initialize_pool", lambda: events.append("open"), raising=False)
+    monkeypatch.setattr(api_main, "close_pool", lambda: events.append("close"), raising=False)
+
+    with TestClient(api_main.app):
+        assert events == ["open"]
+
+    assert events == ["open", "close"]
+
+
 def test_map_data_returns_geojson_feature_collection_contract(monkeypatch):
     captured_args = {}
     geometry = {
@@ -185,6 +196,32 @@ def test_map_data_allows_known_indicator_without_level_values(monkeypatch):
     assert response.status_code == 200
     assert response.json()["features"] == []
     assert captured_args == {"indicator": "poblacion_total", "year": 2022, "level": "municipality"}
+
+
+def test_indicator_scale_returns_stable_scale_metadata(monkeypatch):
+    scale = {
+        "indicator": "poblacion_total",
+        "level": "municipality",
+        "year": 2022,
+        "value_min": 10.0,
+        "value_max": 1000.0,
+        "value_p02": 10.0,
+        "value_p98": 1000.0,
+        "domain_min": 0.0,
+        "domain_max": 1000.0,
+        "transform": "sqrt",
+        "method": "global_min_max",
+    }
+    monkeypatch.setattr(api_main, "fetch_indicator_names", lambda level, year: [("poblacion_total",)])
+    monkeypatch.setattr(api_main, "fetch_indicator_scale", lambda indicator, year, level: scale)
+
+    response = client.get(
+        "/indicator-scales",
+        params={"indicator": "poblacion_total", "year": 2022, "level": "municipality"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"scale": scale}
 
 
 def test_transport_routes_returns_geojson_feature_collection_contract(monkeypatch):

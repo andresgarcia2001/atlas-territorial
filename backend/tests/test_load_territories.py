@@ -612,11 +612,12 @@ def test_main_refreshes_map_data_materialized_view_after_loading(monkeypatch):
         return events.append("load") or 1
 
     monkeypatch.setattr(load_territories, "load_dataset", fake_load_dataset)
+    monkeypatch.setattr(load_territories, "refresh_indicator_scale_stats", lambda cur: events.append("scale"))
     monkeypatch.setattr(load_territories, "refresh_map_data_materialized_view", lambda cur: events.append("refresh"))
 
     load_territories.main()
 
-    assert events == ["load", "refresh"]
+    assert events == ["load", "scale", "refresh"]
     assert len(connections) == 2
     assert not connections[0].autocommit
     assert connections[1].autocommit

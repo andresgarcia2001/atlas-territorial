@@ -715,6 +715,11 @@ def refresh_map_data_materialized_view(cur):
     print("Refreshed territory_indicator_map_data_mv")
 
 
+def refresh_indicator_scale_stats(cur):
+    cur.execute("REFRESH MATERIALIZED VIEW CONCURRENTLY indicator_scale_stats_mv;")
+    print("Refreshed indicator_scale_stats_mv")
+
+
 def load_dataset(cur, config, known_territory_ids, skip_orphans=False):
     config = resolve_runtime_config(config)
     data_path = configured_path(config)
@@ -850,6 +855,7 @@ def main(skip_orphans=False):
     with get_connection() as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
+            refresh_indicator_scale_stats(cur)
             refresh_map_data_materialized_view(cur)
 
     print(f"Loaded {total_loaded} territorial features")

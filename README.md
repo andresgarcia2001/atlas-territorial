@@ -379,6 +379,21 @@ tiene un indice unico para permitir el refresh concurrente. Si se modifican dato
 fuera del loader, ejecutar ese refresh manualmente antes de comparar resultados en
 la API.
 
+La API usa un pool acotado de conexiones psycopg. Se puede ajustar sin cambiar
+el codigo mediante `DB_POOL_MIN_SIZE` (default `2`), `DB_POOL_MAX_SIZE` (default
+`20`) y `DB_POOL_TIMEOUT` (default `5` segundos). Un pool agotado devuelve 503,
+no abre conexiones ilimitadas.
+
+Para mapas interactivos existe `/tiles/territories/{z}/{x}/{y}.pbf`. Los tiles
+usan generalizacion por bandas de zoom, filtro espacial por viewport y conservan
+las propiedades analiticas `value`, `indicator_ratio`, `surface_height` y
+`bar_height`. `/indicator-scales` y el campo `scale` de `/indicator-values`
+mantienen el dominio de color/altura estable por indicador, nivel y anio, incluso
+cuando cambia la seleccion visible.
+
+La migracion de MapLibre usa tiles por defecto. Para forzar temporalmente el
+fallback GeoJSON existente, iniciar el frontend con `VITE_ENABLE_VECTOR_TILES=false`.
+
 ## API territorial
 
 Endpoints principales:
@@ -393,6 +408,8 @@ Endpoints principales:
 - `GET /territories?level=electoral_circuit&parent_id=municipio_060007`
 - `GET /indicator-values?level=electoral_circuit&parent_id=municipio_060007&indicator=poblacion_total&year=2022`
 - `GET /indicator-values?level=census_radius&indicator=poblacion_total&year=2022`
+- `GET /indicator-scales?level=municipality&indicator=poblacion_total&year=2022`
+- `GET /tiles/territories/8/71/99.pbf?level=municipality&indicator=poblacion_total&year=2022`
 - `GET /transport-routes?source=BA%20DATA%20colectivos%20recorridos&lines=10`
 
 `/map-data` acepta `territory_ids` para filtrar territorios. `province_ids` queda

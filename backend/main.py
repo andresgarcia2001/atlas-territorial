@@ -1,13 +1,21 @@
 import os
+from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Query
+import psycopg
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, Response
+
+from db import close_pool, initialize_pool
+from errors import DatabaseUnavailableError
 
 from repositories import (
     DEFAULT_TERRITORY_LEVEL,
     fetch_indicator_names,
+    fetch_indicator_scale,
     fetch_indicator_values,
+    fetch_territory_tile,
     fetch_map_data,
     fetch_transport_route_lines,
     fetch_transport_routes,
@@ -18,7 +26,26 @@ from repositories import (
 
 TerritoryLevelId = Literal["province", "municipality", "census_radius", "electoral_circuit"]
 
-app = FastAPI(title="Territorio Argentino API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    initialize_pool()
+    try:
+        yield
+    finally:
+        close_pool()
+
+
+app = FastAPI(title="Territorio Argentino API", lifespan=lifespan)
+
+
+@app.exception_handler(DatabaseUnavailableError)
+def handle_database_unavailable(_request: Request, caught_error: DatabaseUnavailableError):
+    return JSONResponse(status_code=503, content={"detail": str(caught_error)})
+
+
+@app.exception_handler(psycopg.Error)
+def handle_database_error(_request: Request, _caught_error: psycopg.Error):
+    return JSONResponse(status_code=503, content={"detail": "Database operation unavailable."})
 
 
 def get_cors_origins():
@@ -207,6 +234,7 @@ def get_indicator_values(
         "indicator": indicator,
         "year": year,
         "level": level,
+        "scale": fetch_indicator_scale(indicator, year, level),
         "values": [
             {
                 "territory_id": territory_id,
@@ -215,6 +243,59 @@ def get_indicator_values(
             for territory_id, value in rows
         ],
     }
+
+
+@app.get("/indicator-scales")
+def get_indicator_scale(
+    indicator: str = "poblacion_total",
+    year: int = Query(default=2022, ge=1900),
+    level: TerritoryLevelId = DEFAULT_TERRITORY_LEVEL,
+):
+    validate_indicator(indicator, level, year)
+    scale = fetch_indicator_scale(indicator, year, level)
+
+    if scale is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No hay escala estadística para level={level!r}, year={year}, indicator={indicator!r}.",
+        )
+
+    return {"scale": scale}
+
+
+@app.get("/tiles/territories/{z}/{x}/{y}.pbf")
+def get_territory_tile(
+    z: int,
+    x: int,
+    y: int,
+    level: TerritoryLevelId = DEFAULT_TERRITORY_LEVEL,
+    indicator: str | None = None,
+    year: int | None = Query(default=None, ge=1900),
+    parent_id: str | None = None,
+    territory_ids: list[str] | None = Query(default=None),
+):
+    if z < 0 or z > 22 or x < 0 or y < 0 or x >= 2**z or y >= 2**z:
+        raise HTTPException(status_code=422, detail="Invalid tile coordinates.")
+    if indicator is not None and year is None:
+        raise HTTPException(status_code=422, detail="year is required when indicator is provided.")
+    if indicator is not None:
+        validate_indicator(indicator, level, year)
+
+    tile = fetch_territory_tile(
+        z=z,
+        x=x,
+        y=y,
+        level=level,
+        indicator=indicator,
+        year=year,
+        parent_id=parent_id,
+        territory_ids=territory_ids,
+    )
+    return Response(
+        content=tile,
+        media_type="application/vnd.mapbox-vector-tile",
+        headers={"Cache-Control": "public, max-age=60, stale-while-revalidate=300"},
+    )
 
 
 @app.get("/transport-routes")
